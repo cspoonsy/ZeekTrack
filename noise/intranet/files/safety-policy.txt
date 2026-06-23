@@ -1,0 +1,10 @@
+Acme Rail — Safety Policy (excerpt)
+====================================
+
+1. All personnel must complete annual safety training.
+2. Maximum operating speed is governed by hardware safety limits;
+   software overrides are not permitted.
+3. Emergency stop procedures must be rehearsed quarterly.
+4. Incident reports are due within 24 hours of any safety-relevant event.
+
+For the full policy see the HR portal.

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ChooChoo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="data:,">
+<meta name="choochoo-max-power" content="{{MAX_POWER}}">
+<meta name="choochoo-protocol" content="{{PROTOCOL}}">
+</head>
+<body>
+<main>
+  <h1>ChooChoo <span id="mode-pill" class="pill"></span></h1>
+  <section class="state">
+    <div>Train: <code id="train-id">?</code></div>
+    <div>Connected: <code id="connected">?</code></div>
+    <div>Direction: <code id="direction">?</code></div>
+    <div>Power: <code id="power">0</code></div>
+    <progress id="power-bar" value="0" max="100"></progress>
+  </section>
+
+  <section class="network">
+    <svg id="network-svg" viewBox="0 0 460 90" aria-label="MQTT topology">
+      <!-- Connection lines. The browser and broker are connected via MQTT
+           (over WebSocket from JS perspective, but conceptually the same TCP);
+           controller talks to the broker via plain MQTT TCP; controller talks
+           to the train via BLE (drawn dashed so it visually distinguishes
+           itself from the MQTT segments). -->
+      <line id="link-browser-broker"     x1="60"  y1="45" x2="160" y2="45" stroke="#30363d" stroke-width="2" />
+      <line id="link-broker-controller"  x1="200" y1="45" x2="300" y2="45" stroke="#30363d" stroke-width="2" />
+      <line id="link-controller-train"   x1="340" y1="45" x2="440" y2="45" stroke="#30363d" stroke-width="2" stroke-dasharray="5 4" />
+
+      <!-- Connection labels. JS swaps text to match the active protocol. -->
+      <text id="label-link1" x="110" y="38" text-anchor="middle" fill="#8b949e" font-size="8"></text>
+      <text id="label-link2" x="250" y="38" text-anchor="middle" fill="#8b949e" font-size="8"></text>
+      <text x="390" y="38" text-anchor="middle" fill="#8b949e" font-size="8">BLE</text>
+
+      <!-- Nodes. cx/cy used by the packet animation as endpoints. -->
+      <g id="node-browser" data-x="30" data-y="45">
+        <rect x="0" y="30" width="60" height="30" rx="4" fill="#21262d" stroke="#0b0c0e" />
+        <text x="30" y="50" text-anchor="middle" fill="#e6edf3" font-size="10">Browser</text>
+      </g>
+      <g id="node-broker" data-x="180" data-y="45">
+        <rect id="node-broker-rect" x="160" y="30" width="40" height="30" rx="4" fill="#21262d" stroke="#0b0c0e" />
+        <text id="node-broker-label" x="180" y="50" text-anchor="middle" fill="#e6edf3" font-size="10"></text>
+      </g>
+      <g id="node-controller" data-x="320" data-y="45">
+        <rect x="300" y="30" width="40" height="30" rx="4" fill="#21262d" stroke="#0b0c0e" />
+        <text x="320" y="46" text-anchor="middle" fill="#e6edf3" font-size="9">Ctrl</text>
+        <text x="320" y="56" text-anchor="middle" fill="#8b949e" font-size="7">(Pi)</text>
+      </g>
+      <g id="node-train" data-x="450" data-y="45">
+        <rect x="440" y="30" width="20" height="30" rx="4" fill="#f0883e" stroke="#0b0c0e" />
+      </g>
+
+      <!-- Live packets land in this group. -->
+      <g id="packets"></g>
+    </svg>
+  </section>
+
+  <section class="track">
+    <div id="alert-banner" class="alert hidden" role="alert"></div>
+    <svg id="track-svg" viewBox="0 0 400 220" aria-label="Track">
+      <defs>
+        <radialGradient id="headlight-gradient" cx="0" cy="0.5" r="1">
+          <stop offset="0%" stop-color="#f7e97a" stop-opacity="0.8" />
+          <stop offset="100%" stop-color="#f7e97a" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+      <!-- Rounded-rectangle track. -->
+      <path id="track-path"
+            d="M 80,40 H 320 A 70,70 0 0 1 320,180 H 80 A 70,70 0 0 1 80,40 Z"
+            fill="none" stroke="#30363d" stroke-width="14" stroke-linejoin="round" />
+      <path d="M 80,40 H 320 A 70,70 0 0 1 320,180 H 80 A 70,70 0 0 1 80,40 Z"
+            fill="none" stroke="#161c24" stroke-width="2" stroke-dasharray="6 6" />
+
+      <!-- Stations. Positioned along the straights; data-station attribute
+           is the path-distance (in px) where the platform centre sits.
+           The animation script reads this to drive the signals. -->
+      <g class="stations">
+        <g class="station" data-station="160">
+          <rect x="120" y="14" width="80" height="14" rx="2" fill="#21262d" stroke="#0b0c0e" />
+          <text x="160" y="11" text-anchor="middle" fill="#8b949e" font-size="9">North</text>
+          <circle class="signal" data-station-pos="160" cx="200" cy="40" r="3.5" fill="#3fb950" />
+        </g>
+        <g class="station" data-station="780">
+          <rect x="200" y="192" width="80" height="14" rx="2" fill="#21262d" stroke="#0b0c0e" />
+          <text x="240" y="216" text-anchor="middle" fill="#8b949e" font-size="9">South</text>
+          <circle class="signal" data-station-pos="780" cx="200" cy="180" r="3.5" fill="#3fb950" />
+        </g>
+        <g class="station" data-station="475">
+          <rect x="334" y="103" width="14" height="34" rx="2" fill="#21262d" stroke="#0b0c0e" />
+          <text x="354" y="123" text-anchor="start" fill="#8b949e" font-size="9">East</text>
+          <circle class="signal" data-station-pos="475" cx="320" cy="138" r="3.5" fill="#3fb950" />
+        </g>
+      </g>
+
+      <!-- Locomotive + 2 cars. Each <g> has data-offset = how far behind the
+           locomotive (in path px) it should sit. -->
+      <g id="consist">
+        <g class="car" data-offset="44">
+          <rect x="-12" y="-7" width="24" height="14" rx="2" fill="#8b5cf6" stroke="#0b0c0e" stroke-width="1.2" />
+          <circle cx="-7" cy="7" r="2.4" fill="#0b0c0e" />
+          <circle cx="7" cy="7" r="2.4" fill="#0b0c0e" />
+        </g>
+        <g class="car" data-offset="22">
+          <rect x="-12" y="-7" width="24" height="14" rx="2" fill="#3b82f6" stroke="#0b0c0e" stroke-width="1.2" />
+          <circle cx="-7" cy="7" r="2.4" fill="#0b0c0e" />
+          <circle cx="7" cy="7" r="2.4" fill="#0b0c0e" />
+        </g>
+        <g id="train-group" data-offset="0">
+          <!-- Headlight cone. Sits in front of the locomotive; opacity and
+               width are driven by the light slider + current power. -->
+          <polygon id="headlight-cone" points="14,-7 50,-18 50,18 14,7"
+                   fill="url(#headlight-gradient)" opacity="0" />
+          <rect x="-18" y="-9" width="36" height="18" rx="3" ry="3"
+                fill="#f0883e" stroke="#0b0c0e" stroke-width="1.5" />
+          <circle cx="-10" cy="9" r="3" fill="#0b0c0e" />
+          <circle cx="10" cy="9" r="3" fill="#0b0c0e" />
+          <rect id="train-headlight" x="14" y="-4" width="6" height="8" fill="#f7e97a" opacity="0" />
+        </g>
+      </g>
+    </svg>
+  </section>
+
+  <section class="controls">
+    <label>
+      Power: <span id="power-label">25</span>
+      <input type="range" id="power-input" min="0" max="50" value="25">
+    </label>
+    <div class="buttons">
+      <button id="btn-reverse" class="dir">&#9664; Reverse</button>
+      <button id="btn-stop" class="stop">Stop</button>
+      <button id="btn-forward" class="dir">Forward &#9654;</button>
+    </div>
+    <label>
+      Light:
+      <input type="range" id="light-input" min="0" max="10" value="0">
+      <span id="light-label">0</span>
+    </label>
+  </section>
+
+  <details>
+    <summary>Debug</summary>
+    <pre id="log"></pre>
+  </details>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

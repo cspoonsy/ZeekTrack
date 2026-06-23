@@ -1,0 +1,23 @@
+[Unit]
+Description=ChooChoo Lego Powered Up MQTT controller
+Documentation=file://@REPO@/README.md
+After=network-online.target bluetooth.service
+Wants=network-online.target
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+User=@USER@
+Group=@USER@
+WorkingDirectory=@REPO@
+# Tunables — broker address, hub name, train id, etc.
+EnvironmentFile=-/etc/choochoo/controller.env
+ExecStart=@HOME@/.local/bin/uv run choochoo controller
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,32 @@
+# Build artifacts
+.venv
+build/
+dist/
+wheels/
+*.egg-info
+__pycache__
+*.py[oc]
+
+# Tool caches
+.pytest_cache
+.ruff_cache
+.playwright-mcp
+
+# VCS and IDE
+.git
+.gitignore
+.idea
+.vscode
+
+# Things the container shouldn't see
+docker-compose*.yml
+Dockerfile
+.dockerignore
+deploy/
+scripts/
+mosquitto/data/
+mosquitto/log/
+mosquitto/certs/
+mosquitto/auth/passwords
+mosquitto/auth/credentials.env
+VULNERABILITIES.md
