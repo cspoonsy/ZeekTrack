@@ -1,0 +1,7 @@
+Acme Rail — Section 7 contacts (placeholder)
+============================================
+
+Operations:        ops-section7@acme.example
+Safety:            safety@acme.example
+Engineering:       eng-section7@acme.example
+After-hours desk:  +1-555-0100  (placeholder)

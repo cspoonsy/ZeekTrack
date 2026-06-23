@@ -1,0 +1,3 @@
+# Defense in depth: even if someone changes the Dockerfile to a broad
+# `COPY . .`, the trainer answer key never lands in the image.
+SOLUTIONS.md

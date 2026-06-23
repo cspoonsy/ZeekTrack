@@ -1,0 +1,274 @@
+# Hardwareless demo: full stack runs in containers, train backend is FakeTrain.
+#
+# Pick a control-plane profile:
+#
+#   docker compose -f docker-compose.fake.yml --profile mqtt   up -d
+#   docker compose -f docker-compose.fake.yml --profile modbus up -d
+#
+# Open http://localhost:8000.
+#
+# Stack the `attacker` profile to add a Kali container on the same network
+# (useful for virtual events with no physical LAN):
+#
+#   docker compose -f docker-compose.fake.yml --profile mqtt --profile attacker up -d
+#   docker exec -it choochoo-attacker bash
+#   cat /opt/cheatsheet.md
+#
+# Stack the `noise` profile to add a fake corporate intranet, an SMB share,
+# and a workstation simulator that walks human-paced HTTP/SMB/DNS traffic:
+#
+#   docker compose -f docker-compose.fake.yml --profile mqtt --profile attacker --profile noise up -d
+#
+# Stack the `sensor` profile to add a Corelight Microsensor — see
+# sensor/README.md for the build-time auth token and the license file.
+#
+# Images are built locally. Build everything for the profiles you're running:
+#
+#   docker compose -f docker-compose.fake.yml \
+#       --profile mqtt --profile attacker --profile noise build
+#
+# Or build + start in one shot with `up --build`:
+#
+#   docker compose -f docker-compose.fake.yml \
+#       --profile mqtt --profile attacker --profile noise up --build -d
+#
+# The sensor build needs a Corelight package-repo token; pass it via env:
+#
+#   CORELIGHT_TOKEN=<token> docker compose -f docker-compose.fake.yml \
+#       --profile sensor build
+
+services:
+  # --- MQTT profile --------------------------------------------------------
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: choochoo-mosquitto-fake
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - mosquitto-data-fake:/mosquitto/data
+    profiles: [mqtt]
+    restart: unless-stopped
+
+  controller-mqtt:
+    image: choochoo:dev
+    build:
+      context: .
+    container_name: choochoo-controller-mqtt
+    command: ["controller"]
+    environment:
+      CHOOCHOO_PROTOCOL: mqtt
+      CHOOCHOO_TRAIN: fake
+      CHOOCHOO_TRAIN_ID: t1
+      CHOOCHOO_BROKER: mosquitto
+      CHOOCHOO_BROKER_PORT: "1883"
+    depends_on:
+      - mosquitto
+    profiles: [mqtt]
+    restart: unless-stopped
+
+  web-mqtt:
+    image: choochoo:dev
+    build:
+      context: .
+    container_name: choochoo-web-mqtt
+    ports:
+      - "8000:8000"
+    command: ["web", "--http-port", "8000"]
+    environment:
+      CHOOCHOO_PROTOCOL: mqtt
+      CHOOCHOO_TRAIN_ID: t1
+      CHOOCHOO_BROKER: mosquitto
+      CHOOCHOO_BROKER_PORT: "1883"
+    depends_on:
+      - mosquitto
+    profiles: [mqtt]
+    restart: unless-stopped
+
+  # --- Modbus profile ------------------------------------------------------
+  controller-modbus:
+    image: choochoo:dev
+    build:
+      context: .
+    container_name: choochoo-controller-modbus
+    hostname: controller
+    command: ["controller"]
+    environment:
+      CHOOCHOO_PROTOCOL: modbus
+      CHOOCHOO_TRAIN: fake
+      CHOOCHOO_TRAIN_ID: t1
+    expose:
+      - "5020"
+    profiles: [modbus]
+    restart: unless-stopped
+
+  web-modbus:
+    image: choochoo:dev
+    build:
+      context: .
+    container_name: choochoo-web-modbus
+    ports:
+      - "8000:8000"
+    command: ["web", "--http-port", "8000"]
+    environment:
+      CHOOCHOO_PROTOCOL: modbus
+      CHOOCHOO_TRAIN_ID: t1
+      CHOOCHOO_BROKER: controller
+      CHOOCHOO_MODBUS_PORT: "5020"
+    depends_on:
+      - controller-modbus
+    profiles: [modbus]
+    restart: unless-stopped
+
+  # --- Kali attacker (stack with either profile) --------------------------
+  # Run with: --profile attacker (combine with --profile mqtt|modbus).
+  # Trainee shells in via `docker exec -it choochoo-attacker bash`.
+  attacker:
+    image: choochoo-attacker:dev
+    build:
+      context: ./attacker
+    container_name: choochoo-attacker
+    hostname: attacker
+    # Deliberately no mount of the host repo. Trainees should discover the
+    # attack surface from the wire — names, protocols, point maps, the
+    # cheat code that is the discovery beacon — not by reading the source.
+    # The trainer keeps the source-of-truth (`attacker/SOLUTIONS.md`,
+    # `VULNERABILITIES.md`) on the host as the answer key.
+    profiles: [attacker]
+    # nmap raw-packet scans (-sS, -O) and tcpdump need NET_RAW; without it
+    # `nmap` exits with "Operation not permitted" under Docker Desktop's
+    # default seccomp profile.
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    # No published ports — the attacker is *inside* the network, not
+    # reachable from outside. That mirrors a LAN-side adversary.
+    restart: unless-stopped
+
+  # --- Background traffic (stack with either control plane) ---------------
+  # `noise` profile: fake intranet + SMB share + a workstation that walks a
+  # weighted random schedule of HTTP/SMB/DNS/dashboard traffic. Gives Zeek a
+  # realistic baseline so the attacker's MQTT/Modbus probes have something
+  # to stand out against.
+  intranet:
+    image: nginx:1.27-alpine
+    container_name: choochoo-intranet
+    hostname: intranet
+    volumes:
+      - ./noise/intranet/index.html:/usr/share/nginx/html/index.html:ro
+      - ./noise/intranet/status:/usr/share/nginx/html/status:ro
+      - ./noise/intranet/reports:/usr/share/nginx/html/reports:ro
+      - ./noise/intranet/files:/usr/share/nginx/html/files:ro
+      - ./noise/intranet/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    expose:
+      - "80"
+    profiles: [noise]
+    restart: unless-stopped
+
+  fileshare:
+    # samba/server is a small, well-known SMB server image. We mount the
+    # share read-only and allow guest access — no auth, on purpose, so
+    # the user simulator can list/read without credentials.
+    image: dperson/samba
+    container_name: choochoo-fileshare
+    hostname: fileshare
+    command: >
+      -p
+      -s "section7;/share;yes;yes;yes;all;none;all;Section 7 docs"
+    volumes:
+      - ./noise/share:/share:ro
+    expose:
+      - "139"
+      - "445"
+    profiles: [noise]
+    restart: unless-stopped
+
+  user:
+    image: choochoo-user:dev
+    build:
+      context: ./noise/user
+    container_name: choochoo-user
+    hostname: workstation
+    environment:
+      # The simulator picks whichever dashboard host is up. With the mqtt
+      # profile this is web-mqtt; with modbus, override via .env or compose
+      # `up` env (`CHOOCHOO_DASHBOARD=http://web-modbus:8000`).
+      CHOOCHOO_DASHBOARD: ${CHOOCHOO_DASHBOARD:-http://web-mqtt:8000}
+      CHOOCHOO_INTRANET: http://intranet
+      CHOOCHOO_FILESHARE_HOST: fileshare
+      CHOOCHOO_FILESHARE_NAME: section7
+    depends_on:
+      - intranet
+      - fileshare
+    profiles: [noise]
+    restart: unless-stopped
+
+  # --- Corelight Microsensor (Zeek-based NSM) ------------------------------
+  # `sensor` profile. Sniffs the container's eth0 interface using AF_PACKET
+  # and writes Zeek + Suricata logs under /var/corelight/logs. The trainer
+  # tail-follows the logs to demo Zeek-based detection of MQTT/Modbus
+  # abuse, the noise baseline, etc.
+  #
+  # Limitations:
+  # - Linux x86_64 only (Corelight publishes no arm64 package). Apple
+  #   Silicon hosts run this under Docker Desktop's QEMU layer.
+  # - On the default Docker bridge network, eth0 only sees broadcast +
+  #   the sensor's own connections, not east-west between siblings.
+  #   To capture all train-control traffic, point the sensor at the host
+  #   network (`network_mode: host`) and tap a SPAN port — that's how you
+  #   would deploy a Microsensor in production anyway.
+  sensor:
+    image: choochoo-sensor:dev
+    build:
+      context: ./sensor
+      platforms:
+        - linux/amd64
+      args:
+        CORELIGHT_TOKEN: ${CORELIGHT_TOKEN:-}
+    container_name: choochoo-sensor
+    hostname: sensor
+    platform: linux/amd64
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    volumes:
+      # Refuses to start without the license; see sensor/license/README.md.
+      - ./sensor/license/corelight-license.txt:/etc/corelight-license.txt:ro
+      - ./sensor/corelight-softsensor.conf:/etc/corelight-softsensor.conf:ro
+      - sensor-data:/var/corelight
+    profiles: [sensor]
+    restart: unless-stopped
+
+  # --- Gravwell SIEM (defender side) ---------------------------------------
+  # `gravwell` profile. Single-container Community Edition: Zeek logs
+  # arrive via the softsensor's JSON-over-TCP exporter into a simple_relay
+  # listener tagged `zeek`. Search at http://localhost:8080.
+  #
+  # Default admin creds on first start: admin / changeme. Change them, then
+  # the trainer/defender pivots to building Gravwell queries against the
+  # `tag=zeek` well to demonstrate detection of the MQTT/Modbus abuses
+  # catalogued in VULNERABILITIES.md.
+  #
+  # Drop a license at gravwell/license/gravwell.lic — see that dir's README.
+  gravwell:
+    image: gravwell/gravwell:latest
+    container_name: choochoo-gravwell
+    hostname: gravwell
+    ports:
+      - "8080:80"          # web UI
+    expose:
+      - "7777"             # simple_relay JSON-over-TCP listener (sensor → gravwell)
+      - "4023"             # ingester backend (internal)
+    volumes:
+      - ./gravwell/license/gravwell.lic:/opt/gravwell/etc/license:ro
+      - ./gravwell/config/simple_relay.conf:/opt/gravwell/etc/simple_relay.conf:ro
+      - gravwell-etc:/opt/gravwell/etc-rw
+      - gravwell-storage:/opt/gravwell/storage
+      - gravwell-log:/opt/gravwell/log
+    profiles: [gravwell]
+    restart: unless-stopped
+
+volumes:
+  mosquitto-data-fake:
+  sensor-data:
+  gravwell-etc:
+  gravwell-storage:
+  gravwell-log:

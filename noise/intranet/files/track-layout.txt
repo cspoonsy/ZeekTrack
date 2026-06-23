@@ -1,0 +1,10 @@
+Section 7 — Track Layout (informational only)
+=============================================
+
+Mainline:        Track 1 (north), Track 2 (south)
+Sidings:         Siding A, Siding B
+Stations:        North, East, South
+Power supply:    Substation 7-A
+Length:          1.2 km equivalent loop
+
+For maintenance schedules see the operations calendar.

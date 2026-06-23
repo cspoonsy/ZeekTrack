@@ -1,0 +1,23 @@
+# Per-role ACLs. Topic patterns match `choochoo/train/+/...`.
+#
+# controller — owns the device. Reads commands, writes state and discovery.
+# web        — dashboard backend. Issues commands, reads state and discovery.
+# operator   — human via CLI. Same as web for now; split later if needed.
+#
+# A `topic` line without read/write defaults to readwrite.
+
+user controller
+topic read    choochoo/train/+/cmd/+
+topic write   choochoo/train/+/state
+topic write   choochoo/train/+/event
+topic write   choochoo/train/+/discovery
+
+user web
+topic write   choochoo/train/+/cmd/+
+topic read    choochoo/train/+/state
+topic read    choochoo/train/+/discovery
+
+user operator
+topic write   choochoo/train/+/cmd/+
+topic read    choochoo/train/+/state
+topic read    choochoo/train/+/discovery
