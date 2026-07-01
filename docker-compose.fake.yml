@@ -19,8 +19,10 @@
 #
 #   docker compose -f docker-compose.fake.yml --profile mqtt --profile attacker --profile noise up -d
 #
-# Stack the `sensor` profile to add a Corelight Microsensor — see
-# sensor/README.md for the build-time auth token and the license file.
+# Stack the `sensor` profile to add a FOSS Zeek instance + a Vector sidecar
+# that ships every Zeek log line to Gravwell's simple_relay listener when
+# --profile gravwell is also up. No license, no auth token required — see
+# zeek/README.md.
 #
 # Images are built locally. Build everything for the profiles you're running:
 #
@@ -31,11 +33,6 @@
 #
 #   docker compose -f docker-compose.fake.yml \
 #       --profile mqtt --profile attacker --profile noise up --build -d
-#
-# The sensor build needs a Corelight package-repo token; pass it via env:
-#
-#   CORELIGHT_TOKEN=<token> docker compose -f docker-compose.fake.yml \
-#       --profile sensor build
 
 services:
   # --- MQTT profile --------------------------------------------------------
@@ -201,45 +198,69 @@ services:
     profiles: [noise]
     restart: unless-stopped
 
-  # --- Corelight Microsensor (Zeek-based NSM) ------------------------------
-  # `sensor` profile. Sniffs the container's eth0 interface using AF_PACKET
-  # and writes Zeek + Suricata logs under /var/corelight/logs. The trainer
-  # tail-follows the logs to demo Zeek-based detection of MQTT/Modbus
-  # abuse, the noise baseline, etc.
+  # --- Zeek (FOSS NSM) + Vector shipper -----------------------------------
+  # `sensor` profile. FOSS Zeek sniffs the container's eth0 and writes
+  # JSON-formatted logs (conn / dns / http / ssl / mqtt / modbus / ...)
+  # into a shared volume. The Vector sidecar tails those logs and streams
+  # each line over plain TCP to Gravwell's simple_relay listener when the
+  # `gravwell` profile is also up.
   #
-  # Limitations:
-  # - Linux x86_64 only (Corelight publishes no arm64 package). Apple
-  #   Silicon hosts run this under Docker Desktop's QEMU layer.
-  # - On the default Docker bridge network, eth0 only sees broadcast +
-  #   the sensor's own connections, not east-west between siblings.
-  #   To capture all train-control traffic, point the sensor at the host
-  #   network (`network_mode: host`) and tap a SPAN port — that's how you
-  #   would deploy a Microsensor in production anyway.
-  sensor:
-    image: choochoo-sensor:dev
+  # No license, no auth token, no vendor package repo — same detection
+  # surface for the training exercise, no Corelight account required.
+  #
+  # Bridge-network caveat: eth0 only sees broadcast + the sensor's own
+  # traffic on the default Docker bridge. That's the same limitation the
+  # Corelight softsensor had. For a full defender view of east-west
+  # traffic, deploy on a host with a SPAN/mirror port (physical LAN).
+  # Zeek shares the broker's network namespace (`network_mode:
+  # service:mosquitto`) so its eth0 is literally the broker's eth0. Every
+  # MQTT packet the broker sees — CONNECT, SUBSCRIBE, PUBLISH, DISCONNECT —
+  # is visible to the Zeek analyzers.
+  #
+  # Trade-off: this profile focuses on the MQTT control plane. Under the
+  # `modbus` profile we point Zeek at the Modbus outstation instead (see
+  # the `zeek-modbus` override below); running both simultaneously would
+  # need two Zeek containers.
+  zeek:
+    image: choochoo-zeek:dev
     build:
-      context: ./sensor
-      platforms:
-        - linux/amd64
-      args:
-        CORELIGHT_TOKEN: ${CORELIGHT_TOKEN:-}
-    container_name: choochoo-sensor
-    hostname: sensor
-    platform: linux/amd64
+      context: ./zeek
+    container_name: choochoo-zeek
     cap_add:
       - NET_RAW
       - NET_ADMIN
     volumes:
-      # Refuses to start without the license; see sensor/license/README.md.
-      - ./sensor/license/corelight-license.txt:/etc/corelight-license.txt:ro
-      - ./sensor/corelight-softsensor.conf:/etc/corelight-softsensor.conf:ro
-      - sensor-data:/var/corelight
+      - zeek-logs:/logs
+    # Share the broker's netns — Zeek sees all MQTT traffic to/from it.
+    # `container:<name>` is profile-agnostic (unlike `service:`), so this
+    # works whether you're up under `--profile mqtt` or with a Modbus
+    # target substituted here. Zeek is not addressable as `zeek` from
+    # other containers in this mode, but nothing needs to reach it that
+    # way — Vector reads from the shared `zeek-logs` volume, not the
+    # network.
+    network_mode: "container:choochoo-mosquitto-fake"
+    depends_on:
+      - mosquitto
+    profiles: [sensor]
+    restart: unless-stopped
+
+  vector:
+    image: timberio/vector:0.49.0-alpine
+    container_name: choochoo-vector
+    hostname: vector
+    volumes:
+      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - zeek-logs:/zeek-logs:ro
+      - vector-data:/var/lib/vector
+    command: ["--config", "/etc/vector/vector.yaml"]
+    depends_on:
+      - zeek
     profiles: [sensor]
     restart: unless-stopped
 
   # --- Gravwell SIEM (defender side) ---------------------------------------
   # `gravwell` profile. Single-container Community Edition: Zeek logs
-  # arrive via the softsensor's JSON-over-TCP exporter into a simple_relay
+  # arrive via the Vector sidecar (--profile sensor) into a simple_relay
   # listener tagged `zeek`. Search at http://localhost:8080.
   #
   # Default admin creds on first start: admin / changeme. Change them, then
@@ -247,7 +268,12 @@ services:
   # `tag=zeek` well to demonstrate detection of the MQTT/Modbus abuses
   # catalogued in VULNERABILITIES.md.
   #
-  # Drop a license at gravwell/license/gravwell.lic — see that dir's README.
+  # License and EULA are accepted via the web UI on first access — no
+  # host-side file drop required. The license persists in the
+  # `gravwell-storage` volume across restarts.
+  #
+  # The base image runs only the webserver + indexer. Ingesters are
+  # separate containers that connect to :4023 — see `simple_relay` below.
   gravwell:
     image: gravwell/gravwell:latest
     container_name: choochoo-gravwell
@@ -255,20 +281,40 @@ services:
     ports:
       - "8080:80"          # web UI
     expose:
-      - "7777"             # simple_relay JSON-over-TCP listener (sensor → gravwell)
-      - "4023"             # ingester backend (internal)
+      - "4023"             # cleartext ingester backend (simple_relay → gravwell)
     volumes:
-      - ./gravwell/license/gravwell.lic:/opt/gravwell/etc/license:ro
-      - ./gravwell/config/simple_relay.conf:/opt/gravwell/etc/simple_relay.conf:ro
-      - gravwell-etc:/opt/gravwell/etc-rw
       - gravwell-storage:/opt/gravwell/storage
       - gravwell-log:/opt/gravwell/log
     profiles: [gravwell]
     restart: unless-stopped
 
+  # Gravwell's line-delimited JSON ingester. Runs as its own container per
+  # Gravwell's recommended pattern; connects to `gravwell:4023` using the
+  # shared Ingest-Secret from simple_relay.conf.
+  simple-relay:
+    image: gravwell/simple_relay:latest
+    container_name: choochoo-simple-relay
+    hostname: simple-relay
+    expose:
+      - "7777"             # line-JSON listener (vector → simple-relay)
+    # simple_relay stamps an ingester UUID into its config on first run via
+    # an atomic rename, which fails on a bind-mounted file. Mount to a
+    # side path and copy it into place before letting the manager start.
+    volumes:
+      - ./gravwell/config/simple_relay.conf:/etc/simple_relay.conf.seed:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cp -f /etc/simple_relay.conf.seed /opt/gravwell/etc/simple_relay.conf &&
+        exec /opt/gravwell/bin/manager
+    depends_on:
+      - gravwell
+    profiles: [gravwell]
+    restart: unless-stopped
+
 volumes:
   mosquitto-data-fake:
-  sensor-data:
-  gravwell-etc:
+  zeek-logs:
+  vector-data:
   gravwell-storage:
   gravwell-log:

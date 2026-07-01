@@ -74,10 +74,11 @@ git clone <repo-url> choochoo && cd choochoo
 │   ├── intranet/                    # nginx-served fake corporate portal
 │   ├── share/                       # files for the SMB share
 │   └── user/                        # workstation simulator
-├── sensor/                          # Corelight Microsensor profile
-│   ├── Dockerfile                   # installs the official package
-│   ├── corelight-softsensor.conf    # default config (mounted into the container)
-│   └── license/                     # gitignored drop-zone for your license file
+├── zeek/                            # FOSS Zeek NSM (sensor profile)
+│   ├── Dockerfile                   # zeek/zeek:latest + our site policy
+│   └── local.zeek                   # loads MQTT + Modbus analyzers, JSON output
+├── vector/                          # Zeek → Gravwell shipper (sensor profile)
+│   └── vector.yaml                  # tails zeek-logs volume, TCP sink to gravwell:7777
 ├── mosquitto/
 │   ├── config/                      # baseline broker config (anonymous)
 │   ├── config-hardened/             # TLS + auth + ACL config
@@ -101,6 +102,115 @@ after cloning.
 |----------------|------------------------------------------|-----------------------------------------------------------------|
 | **MQTT**       | 3 containers: web + mosquitto + controller-fake | 2 containers (web + mosquitto) + controller bare-metal on the Pi (BLE) |
 | **Modbus**     | 2 containers: web + controller-fake      | 1 container (web) + controller bare-metal on the Pi (BLE)       |
+
+## Networking reference
+
+All containers share the default Docker bridge network `choochoo_default`
+(created automatically by Compose from the project name). Inside that
+network, services address each other by **service name** — the compose
+`hostname:` field makes each name resolve via Docker's embedded DNS.
+Only the ports in the "Host" column below are reachable from outside
+the network.
+
+### What the host binds
+
+| Purpose                       | Host URL / endpoint             | Container         | Container port | Profile     |
+|-------------------------------|---------------------------------|-------------------|----------------|-------------|
+| Web UI (both control planes)  | `http://localhost:8000`         | `choochoo-web-*`  | 8000/tcp       | `mqtt` / `modbus` |
+| Gravwell UI                   | `http://localhost:8080`         | `choochoo-gravwell` | 80/tcp       | `gravwell`  |
+
+Nothing else on the host is published. The Mosquitto broker, Modbus
+outstation, Kali attacker, Zeek sensor, Vector shipper, and internal
+noise services are all **only reachable from inside** the compose
+network, on purpose — trainees who need to reach the broker or the
+Modbus port do so from the `attacker` container (`docker exec -it
+choochoo-attacker bash`), which mirrors a LAN-side adversary.
+
+### Internal service map (compose network)
+
+Addressable via the hostname shown, from any other container on the
+same compose network:
+
+| Service (compose name)   | Hostname (DNS) | Container port(s)      | Speaks           | Purpose |
+|--------------------------|----------------|------------------------|------------------|---------|
+| `mosquitto`              | `mosquitto`    | 1883/tcp               | MQTT             | Anonymous broker (baseline profile) |
+| `controller-mqtt`        | *(default)*    | —                      | MQTT client      | Bridges MQTT ↔ train |
+| `web-mqtt`               | *(default)*    | 8000/tcp               | HTTP             | FastAPI UI (MQTT mode) |
+| `controller-modbus`      | `controller`   | 5020/tcp               | Modbus/TCP       | Modbus outstation (unit ID 1) |
+| `web-modbus`             | *(default)*    | 8000/tcp               | HTTP             | FastAPI UI (Modbus mode) |
+| `attacker`               | `attacker`     | —                      | shell / tools    | Kali box with `nmap`, `mosquitto-clients`, `mbpoll`, `pymodbus`, `tcpdump` |
+| `intranet`               | `intranet`     | 80/tcp                 | HTTP             | Fake corporate portal (`http://intranet/`) |
+| `fileshare`              | `fileshare`    | 139/tcp, 445/tcp       | SMB              | Guest-readable share `//fileshare/section7` |
+| `user`                   | `workstation`  | —                      | client only      | Workstation traffic simulator |
+| `zeek`                   | `zeek`         | —                      | pcap capture     | FOSS Zeek sniffs its own `eth0`, writes JSON logs to the `zeek-logs` volume |
+| `vector`                 | `vector`       | —                      | file → TCP       | Tails `zeek-logs` volume, ships to `simple-relay:7777` |
+| `simple-relay`           | `simple-relay` | 7777/tcp               | TCP (line JSON)  | Gravwell ingester — receives from Vector, forwards to `gravwell:4023` |
+| `gravwell`               | `gravwell`     | 80/tcp, 4023/tcp       | HTTP + TCP       | SIEM: 80 = UI, 4023 = cleartext ingester backend |
+
+### Data flow
+
+```
+                    ┌──────────────┐
+     (from host) ───▶│   web-mqtt   │──MQTT──▶ ┌─────────────┐──▶ controller-mqtt ──▶ (train)
+   http://:8000     │  :8000       │           │  mosquitto  │
+                    └──────────────┘           │   :1883     │──MQTT──▶  attacker (docker exec)
+                                               └─────────────┘
+
+                    ┌──────────────┐
+     (from host) ───▶│   web-modbus │──Modbus/TCP──▶ controller-modbus:5020 ──▶ (train)
+   http://:8000     │  :8000       │
+                    └──────────────┘
+
+                    (sniff eth0)
+   any traffic  ──▶ zeek ──▶ /logs volume ──▶ vector ──TCP:7777──▶ simple-relay ──TCP:4023──▶ gravwell ──▶ UI :8080
+```
+
+### Environment variables (name → default → meaning)
+
+Client-side (controller / web / send):
+
+| Variable                  | Default          | Meaning                                                            |
+|---------------------------|------------------|--------------------------------------------------------------------|
+| `CHOOCHOO_PROTOCOL`       | `mqtt`           | `mqtt` (broker) or `modbus` (TCP outstation)                       |
+| `CHOOCHOO_BROKER`         | `localhost`      | Broker hostname (MQTT mode) or Modbus outstation host (Modbus mode) |
+| `CHOOCHOO_BROKER_PORT`    | `1883` / `8883`  | Broker port; hardened profile flips to 8883                        |
+| `CHOOCHOO_MODBUS_PORT`    | `5020`           | Modbus/TCP port on the outstation                                  |
+| `CHOOCHOO_MODBUS_BIND`    | `0.0.0.0`        | Bind address for the Modbus outstation                             |
+| `CHOOCHOO_TRAIN_ID`       | `t1`             | Train identifier used in topic prefixes                            |
+| `CHOOCHOO_TRAIN`          | `fake`           | Train backend: `fake` / `powered_up` / `buwizz`                    |
+| `CHOOCHOO_HUB_NAME`       | `Smart Hub`      | BLE-advertised name of the Powered Up hub                          |
+| `CHOOCHOO_BUWIZZ_NAME`    | `BuWizz3`        | BLE-advertised name of the BuWizz hub                              |
+| `CHOOCHOO_USER` / `_PASSWORD` / `_TLS_CA` | *(unset)* | Broker auth + TLS for the hardened profile             |
+
+Noise-simulator (`user` service):
+
+| Variable                  | Default                         | Meaning                                       |
+|---------------------------|---------------------------------|-----------------------------------------------|
+| `CHOOCHOO_DASHBOARD`      | `http://web-mqtt:8000`          | Dashboard the simulator polls                 |
+| `CHOOCHOO_INTRANET`       | `http://intranet`               | Fake corporate portal URL                     |
+| `CHOOCHOO_FILESHARE_HOST` | `fileshare`                     | SMB server hostname                           |
+| `CHOOCHOO_FILESHARE_NAME` | `section7`                      | Share name                                    |
+
+### Ports at a glance
+
+| Port | Where           | Protocol       | Reachable from                        |
+|------|-----------------|----------------|---------------------------------------|
+| 8000 | host            | HTTP           | Anywhere on the host LAN              |
+| 8080 | host            | HTTP           | Anywhere on the host LAN (Gravwell UI) |
+| 1883 | mosquitto       | MQTT           | Compose network only (baseline)       |
+| 8883 | mosquitto       | MQTT + TLS     | Compose network only (hardened)       |
+| 5020 | controller      | Modbus/TCP     | Compose network only                  |
+| 7777 | simple-relay    | TCP (line JSON) | Compose network only (from `vector`) |
+| 4023 | gravwell        | TCP (ingester) | Compose network only (from `simple-relay`) |
+| 80   | intranet        | HTTP           | Compose network only                  |
+| 139, 445 | fileshare   | SMB            | Compose network only                  |
+
+**BLE (real train only)** — the Powered Up SmartHub and BuWizz Pro advertise
+over Bluetooth Low Energy; no IP addresses or ports are involved. The
+Pi / Mac running the controller must own the BLE radio.
+`00001623-1212-efde-1623-785feabcd123` is the LEGO Wireless Protocol
+service UUID; `500592d1-74fb-4481-88b3-9919b1676e93` is the BuWizz
+service UUID.
 
 ## Quick start — fully containerized, no hardware
 
@@ -144,53 +254,89 @@ docker compose -f docker-compose.fake.yml \
   --profile mqtt --profile attacker --profile noise up -d
 ```
 
-### Adding a Corelight Microsensor (defender side)
+### Adding Zeek (defender side)
 
-Stack the `sensor` profile to run an actual Corelight Microsensor in a
-container. Zeek + Suricata logs land in a named volume, so trainees on
-the defender side can run real detection logic against real traffic
-instead of theoretical packets:
+Stack the `sensor` profile to run FOSS **Zeek** in a container alongside
+a **Vector** log-shipper sidecar. Zeek writes JSON logs
+(`conn`, `dns`, `http`, `ssl`, `mqtt`, `modbus`, `files`, ...) into a
+shared volume; Vector tails those files and, when the `gravwell` profile
+is also up, streams each line to Gravwell over plain TCP. No license, no
+vendor auth token, no account required.
 
 ```sh
-# Two prerequisites (both from Corelight, neither in the repo):
-#  1. Package-repo auth token from https://my.corelight.cloud/
-#  2. License file at sensor/license/corelight-license.txt
-
-CORELIGHT_TOKEN=<your-token> docker compose -f docker-compose.fake.yml \
+docker compose -f docker-compose.fake.yml \
   --profile mqtt --profile noise --profile sensor up --build -d
 
-docker exec -it choochoo-sensor bash
-tail -f /var/corelight/logs/current/conn.log
+# Tail the raw JSON logs directly:
+docker exec -it choochoo-zeek sh -c 'tail -F /logs/conn.log'
+docker exec -it choochoo-zeek sh -c 'tail -F /logs/modbus.log'
 ```
 
-See [`sensor/README.md`](sensor/README.md) for the full setup, the
-caveats around bridge-network sniffing, and notes on enabling streaming
-exporters (Splunk HEC, Kafka, JSON-over-TCP, Syslog).
+Bridge-network caveat: on the default Docker bridge, `eth0` only sees
+broadcast + the sensor's own traffic, not east-west between siblings.
+For a full defender view of container-to-container traffic, deploy on a
+host with a SPAN/mirror port and run the sensor with
+`network_mode: host` pointed at the mirror interface.
+
+To swap Gravwell for a different SIEM later (or dual-ship), edit the
+`sinks:` block in [`vector/vector.yaml`](vector/vector.yaml). To load
+additional Zeek analyzers or tune site policy, edit
+[`zeek/local.zeek`](zeek/local.zeek).
 
 ### Adding Gravwell (SIEM destination)
 
 Stack the `gravwell` profile to run Gravwell Community Edition next to
-the sensor. The softsensor's JSON-over-TCP exporter (already enabled in
-[`sensor/corelight-softsensor.conf`](sensor/corelight-softsensor.conf))
-ships every Zeek log to Gravwell's `simple_relay` listener under the
-`zeek` tag, so the defender side gets a real searchable UI instead of
-`tail -f`:
+the Vector shipper. Vector ships every Zeek log line to Gravwell's
+`simple_relay` listener under the `zeek` tag, so the defender side gets
+a real searchable UI instead of `tail -f`.
 
+**One-time Gravwell setup (first launch only):**
+
+1. Grab a free Community license from
+   <https://www.gravwell.io/community-edition> (13.5 GB/day, no expiry,
+   registration required). Save the key somewhere handy — you'll paste
+   it in step 4.
+2. Start the profile:
+   ```sh
+   docker compose -f docker-compose.fake.yml \
+     --profile mqtt --profile noise --profile sensor --profile gravwell up --build -d
+   ```
+3. Open <http://localhost:8080>. On first launch Gravwell walks you
+   through an EULA + license activation flow.
+4. Accept the EULA, paste your license key, then log in with default
+   creds `admin` / `changeme` — **change the admin password immediately**
+   at Profile → Change Password.
+
+Both the license and the admin password persist in the
+`choochoo_gravwell-storage` Docker volume, so subsequent `up -d` runs
+skip the wizard. Nothing license-related lives in the repo tree — the
+key file never touches disk in the working directory (and the
+`.gitignore` guards `*.lic` / `*.license` regardless, in case a future
+config change bind-mounts one).
+
+To reset Gravwell to a factory state (re-run the EULA + license flow):
 ```sh
-# Drop a Community license at gravwell/license/gravwell.lic
-# (free up to 13.5 GB/day from https://www.gravwell.io/community-edition).
-
-CORELIGHT_TOKEN=<your-token> docker compose -f docker-compose.fake.yml \
-  --profile mqtt --profile noise --profile sensor --profile gravwell up --build -d
-
-# Web UI on http://localhost:8080 — default creds admin / changeme.
-# Sample query (after a few minutes of traffic):
-#   tag=zeek json _path | table _path id.orig_h id.resp_h
+docker compose -f docker-compose.fake.yml --profile gravwell down
+docker volume rm choochoo_gravwell-storage choochoo_gravwell-log
 ```
 
-To redirect to a different SIEM, edit `Corelight::json_server` in
-[`sensor/corelight-softsensor.conf`](sensor/corelight-softsensor.conf)
-and `docker compose restart sensor`.
+Sample queries once traffic is flowing. Gravwell's pipeline is strict
+about extraction — every field you reference later must appear in the
+first `json` module call. Wrap field names with dots in quotes:
+
+```gravwell
+# All Zeek events, one row per record, with the log stream label:
+tag=zeek json "_path" "id.orig_h" "id.resp_h" "id.resp_p"
+    | table _path id.orig_h id.resp_h id.resp_p
+
+# Any client publishing an MQTT command (attacker-style behavior):
+tag=zeek json "_path"=="mqtt_publish" "id.orig_h" topic payload
+    | table _write_ts id.orig_h topic payload
+
+# MQTT CONNECT events — spot rogue clients, empty client IDs:
+tag=zeek json "_path"=="mqtt_connect" "id.orig_h" client_id connect_status
+    | table _write_ts id.orig_h client_id connect_status
+```
 
 ### Adding a Kali attacker box (virtual events)
 

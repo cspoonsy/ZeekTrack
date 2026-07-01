@@ -18,11 +18,23 @@ mosquitto/certs/
 mosquitto/auth/passwords
 mosquitto/auth/credentials.env
 
-# Corelight Microsensor license (per-customer, never committed)
-sensor/license/corelight-license.txt
+# License files — never commit these regardless of where they live.
+# Gravwell CE state (license, EULA acceptance, admin password) is stored
+# inside the `choochoo_gravwell-storage` named volume and isn't in the
+# repo tree, but these globs guard against a future config that mounts a
+# license from disk (e.g. an air-gapped or CI environment).
+*.lic
+*.license
+*license.txt
+*license.key
+license/
+licenses/
+!LICENSE           # source-code license file, if present, is fine to commit
 
-# Gravwell Community license (per-account, never committed)
-gravwell/license/gravwell.lic
+# Env files that commonly carry credentials.
+.env
+.env.*
+!.env.example
 
 # Tool caches
 .pytest_cache/
