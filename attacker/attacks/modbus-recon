@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# Stage 1 — Modbus Recon (M1, M3, M4)
+#
+# WHAT THIS DEMONSTRATES:
+#   Modbus/TCP has zero authentication. Anyone who can route a TCP packet to
+#   the outstation can read every register — there is no "are you authorized"
+#   step. This stage shows how an attacker discovers what a Modbus device does
+#   in under a minute using standard tooling available on any Kali install.
+#
+# MITRE ATT&CK (ICS): T0846 Remote System Discovery, T0801 Monitor Process State
+#
+# ZEEK VISIBILITY:
+#   conn.log  — TCP connection from attacker IP to port 5020
+#   modbus.log — FC 1/2/3/4 (reads) from attacker IP; func, address, quantity all logged
+set -euo pipefail
+
+CONTROLLER="${CONTROLLER:-controller}"
+PORT="${PORT:-5020}"
+
+echo "=== [modbus-recon] Stage 1: Modbus discovery and register enumeration ==="
+echo ""
+echo "  Modbus was designed in 1979 for serial links between trusted devices."
+echo "  It was retrofitted onto TCP but kept zero security. No auth, no TLS,"
+echo "  no concept of 'who are you.' If you can reach the port, you own it."
+echo ""
+
+echo "--- Port scan: is Modbus running? ---"
+echo "  nmap fingerprints the service on port $PORT."
+nmap -sV -p "$PORT" "$CONTROLLER" 2>/dev/null | grep -E 'PORT|open|modbus|zenginkyo' || true
+echo ""
+
+echo "--- Holding Registers (HR 0-2) ---"
+echo "  Holding registers are read/write memory — the operator sets these."
+echo "  HR 0 = motor power (-100..100), HR 1 = light brightness, HR 2 = cmd counter."
+echo "  Reading them requires no credentials and takes one function code (FC 3)."
+mbpoll -1 -m tcp -p "$PORT" -a 1 -t 4:int16 -r 1 -c 3 "$CONTROLLER" 2>/dev/null || true
+echo ""
+
+echo "--- Coils (Coil 0) ---"
+echo "  Coils are single-bit read/write — think on/off switches."
+echo "  Coil 0 = emergency stop. Reading it tells us its current state (FC 1)."
+mbpoll -1 -m tcp -p "$PORT" -a 1 -t 0 -r 1 -c 1 "$CONTROLLER" 2>/dev/null || true
+echo ""
+
+echo "--- Input Registers (IR 0-1) ---"
+echo "  Input registers are read-only sensor values — the device reports these."
+echo "  IR 0 = current commanded power, IR 1 = MAX_POWER constant."
+echo "  IR 1 is critical: it tells us the safety clamp value before we write anything."
+mbpoll -1 -m tcp -p "$PORT" -a 1 -t 3 -r 1 -c 2 "$CONTROLLER" 2>/dev/null || true
+echo ""
+
+echo "--- Discrete Inputs (DI 0-1) ---"
+echo "  Discrete inputs are read-only single-bit sensor states."
+echo "  DI 0 = train connected, DI 1 = current direction."
+mbpoll -1 -m tcp -p "$PORT" -a 1 -t 1 -r 1 -c 2 "$CONTROLLER" 2>/dev/null || true
+echo ""
+
+echo "--- Full picture via Python pymodbus ---"
+echo "  Real ICS tools (HMI software, engineering workstations) use the same calls."
+python3 - <<'PY'
+import asyncio, os
+from pymodbus.client import AsyncModbusTcpClient
+
+async def go():
+    c = AsyncModbusTcpClient(os.environ.get("CONTROLLER","controller"),
+                             port=int(os.environ.get("PORT","5020")))
+    await c.connect()
+
+    hr = await c.read_holding_registers(0, count=3)
+    ir = await c.read_input_registers(0, count=2)
+    coil = await c.read_coils(0, count=1)
+    di = await c.read_discrete_inputs(0, count=2)
+
+    print(f"  HR[0] motor power   = {hr.registers[0]}  (write target)")
+    print(f"  HR[1] brightness    = {hr.registers[1]}")
+    print(f"  HR[2] cmd counter   = {hr.registers[2]}")
+    print(f"  IR[0] current power = {ir.registers[0]}")
+    print(f"  IR[1] MAX_POWER     = {ir.registers[1]}  (safety clamp — now we know the ceiling)")
+    print(f"  Coil[0] e-stop      = {coil.bits[0]}")
+    print(f"  DI[0] connected     = {di.bits[0]}")
+    print(f"  DI[1] direction     = {'forward' if di.bits[1] else 'reverse'}")
+    c.close()
+
+asyncio.run(go())
+PY
+
+echo ""
+echo "[modbus-recon] Done. The attacker now has a complete register map with zero credentials."
+echo ""
+echo "Gravwell query to see this in Zeek:"
+echo "  tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | json \"id.orig_h\" func | count by func | table func count"
+echo ""
+echo "Key detection signal: any IP issuing FC 1/2/3/4 reads that isn't the legitimate HMI"
+echo "  is doing reconnaissance. The web UI only ever writes."

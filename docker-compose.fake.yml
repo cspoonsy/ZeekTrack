@@ -2,8 +2,11 @@
 #
 # Pick a control-plane profile:
 #
-#   docker compose -f docker-compose.fake.yml --profile mqtt   up -d
-#   docker compose -f docker-compose.fake.yml --profile modbus up -d
+#   docker compose -f docker-compose.fake.yml --profile mqtt   up -d   # MQTT only  → http://localhost:8000
+#   docker compose -f docker-compose.fake.yml --profile modbus up -d   # Modbus only → http://localhost:8000
+#   docker compose -f docker-compose.fake.yml --profile dual   up -d   # Both simultaneously:
+#                                                                       #   MQTT   → http://localhost:8000
+#                                                                       #   Modbus → http://localhost:8001
 #
 # Open http://localhost:8000.
 #
@@ -42,7 +45,7 @@ services:
     volumes:
       - ./mosquitto/config:/mosquitto/config:ro
       - mosquitto-data-fake:/mosquitto/data
-    profiles: [mqtt]
+    profiles: [mqtt, dual]
     restart: unless-stopped
 
   controller-mqtt:
@@ -59,7 +62,7 @@ services:
       CHOOCHOO_BROKER_PORT: "1883"
     depends_on:
       - mosquitto
-    profiles: [mqtt]
+    profiles: [mqtt, dual]
     restart: unless-stopped
 
   web-mqtt:
@@ -77,7 +80,7 @@ services:
       CHOOCHOO_BROKER_PORT: "1883"
     depends_on:
       - mosquitto
-    profiles: [mqtt]
+    profiles: [mqtt, dual]
     restart: unless-stopped
 
   # --- Modbus profile ------------------------------------------------------
@@ -94,7 +97,7 @@ services:
       CHOOCHOO_TRAIN_ID: t1
     expose:
       - "5020"
-    profiles: [modbus]
+    profiles: [modbus, dual]
     restart: unless-stopped
 
   web-modbus:
@@ -103,7 +106,7 @@ services:
       context: .
     container_name: choochoo-web-modbus
     ports:
-      - "8000:8000"
+      - "${MODBUS_WEB_PORT:-8000}:8000"
     command: ["web", "--http-port", "8000"]
     environment:
       CHOOCHOO_PROTOCOL: modbus
@@ -112,7 +115,7 @@ services:
       CHOOCHOO_MODBUS_PORT: "5020"
     depends_on:
       - controller-modbus
-    profiles: [modbus]
+    profiles: [modbus, dual]
     restart: unless-stopped
 
   # --- Kali attacker (stack with either profile) --------------------------
@@ -217,10 +220,10 @@ services:
   # MQTT packet the broker sees — CONNECT, SUBSCRIBE, PUBLISH, DISCONNECT —
   # is visible to the Zeek analyzers.
   #
-  # Trade-off: this profile focuses on the MQTT control plane. Under the
-  # `modbus` profile we point Zeek at the Modbus outstation instead (see
-  # the `zeek-modbus` override below); running both simultaneously would
-  # need two Zeek containers.
+  # Under the `sensor` profile, Zeek sniffs the MQTT broker's network
+  # namespace (or the Modbus controller's when ZEEK_TARGET_CONTAINER is set).
+  # Under the `dual` profile, two Zeek containers run simultaneously — one
+  # on the broker netns for MQTT, one on the controller netns for Modbus.
   zeek:
     image: choochoo-zeek:dev
     build:
@@ -231,18 +234,41 @@ services:
       - NET_ADMIN
     volumes:
       - zeek-logs:/logs
-    # Share the broker's netns — Zeek sees all MQTT traffic to/from it.
-    # `container:<name>` is profile-agnostic (unlike `service:`), so this
-    # works whether you're up under `--profile mqtt` or with a Modbus
-    # target substituted here. Zeek is not addressable as `zeek` from
-    # other containers in this mode, but nothing needs to reach it that
-    # way — Vector reads from the shared `zeek-logs` volume, not the
-    # network.
+    network_mode: "container:${ZEEK_TARGET_CONTAINER:-choochoo-mosquitto-fake}"
+    profiles: [sensor]
+    restart: on-failure
+
+  zeek-mqtt:
+    image: choochoo-zeek:dev
+    build:
+      context: ./zeek
+    container_name: choochoo-zeek-mqtt
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    volumes:
+      - zeek-logs:/logs
     network_mode: "container:choochoo-mosquitto-fake"
     depends_on:
       - mosquitto
-    profiles: [sensor]
-    restart: unless-stopped
+    profiles: [dual]
+    restart: on-failure
+
+  zeek-modbus:
+    image: choochoo-zeek:dev
+    build:
+      context: ./zeek
+    container_name: choochoo-zeek-modbus
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    volumes:
+      - zeek-modbus-logs:/logs
+    network_mode: "container:choochoo-controller-modbus"
+    depends_on:
+      - controller-modbus
+    profiles: [dual]
+    restart: on-failure
 
   vector:
     image: timberio/vector:0.49.0-alpine
@@ -253,9 +279,20 @@ services:
       - zeek-logs:/zeek-logs:ro
       - vector-data:/var/lib/vector
     command: ["--config", "/etc/vector/vector.yaml"]
-    depends_on:
-      - zeek
     profiles: [sensor]
+    restart: unless-stopped
+
+  vector-dual:
+    image: timberio/vector:0.49.0-alpine
+    container_name: choochoo-vector-dual
+    hostname: vector-dual
+    volumes:
+      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - zeek-logs:/zeek-logs:ro
+      - zeek-modbus-logs:/zeek-modbus-logs:ro
+      - vector-data:/var/lib/vector
+    command: ["--config", "/etc/vector/vector.yaml"]
+    profiles: [dual]
     restart: unless-stopped
 
   # --- Gravwell SIEM (defender side) ---------------------------------------
@@ -315,6 +352,7 @@ services:
 volumes:
   mosquitto-data-fake:
   zeek-logs:
+  zeek-modbus-logs:
   vector-data:
   gravwell-storage:
   gravwell-log:

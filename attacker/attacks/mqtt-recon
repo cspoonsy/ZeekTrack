@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Stage 1 — MQTT Recon
+# Zeek visibility: mqtt.log SUBSCRIBE from non-controller IP; conn.log 1883/tcp
+set -euo pipefail
+
+BROKER="${BROKER:-mosquitto}"
+TRAIN="${TRAIN:-t1}"
+
+echo "=== [mqtt-recon] Stage 1: Network and broker discovery ==="
+echo ""
+
+echo "--- Port scan (1883/8000/9001) ---"
+nmap -sV -p 1883,8000,9001 "$BROKER" 2>/dev/null | grep -E 'PORT|open|Mosquitto|uvicorn' || true
+echo ""
+
+echo "--- Dumping all MQTT topics (5 seconds) ---"
+echo "  Zeek will log this SUBSCRIBE '#' to mqtt.log"
+timeout 5 mosquitto_sub -h "$BROKER" -t '#' -v 2>/dev/null || true
+echo ""
+
+echo "--- Discovery beacon (single retained message) ---"
+mosquitto_sub -h "$BROKER" -t "choochoo/+/+/discovery" -C 1 -v 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+echo ""
+
+echo "--- Current train state ---"
+mosquitto_sub -h "$BROKER" -t "choochoo/train/${TRAIN}/state" -C 1 -v 2>/dev/null | python3 -m json.tool 2>/dev/null || true
+
+echo ""
+echo "[mqtt-recon] Done. Check mqtt.log on the sensor — look for:"
+echo "  SUBSCRIBE to # from this container's IP"
+echo "  CONNECT with no username (anonymous)"

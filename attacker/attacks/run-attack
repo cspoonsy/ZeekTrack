@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# run-attack — trainer dispatcher for named attack scenarios
+#
+# Usage (from the host):
+#   docker exec -it choochoo-attacker run-attack <scenario>
+#   docker exec -e DURATION=30 -it choochoo-attacker run-attack mqtt-flood
+#
+# Usage (inside the container):
+#   run-attack <scenario>
+#   run-attack --list
+set -euo pipefail
+
+ATTACKS_DIR="/opt/attacks"
+
+usage() {
+  cat <<EOF
+Usage: run-attack <scenario> [-- args...]
+       run-attack --list
+
+Scenarios:
+  MQTT mode (requires --profile mqtt):
+    mqtt-recon      Stage 1 — network scan, dump all topics, read discovery beacon
+    mqtt-inject     Stage 2 — direct motor command injection via MQTT and HTTP API
+    mqtt-flood      Stage 3a — throttle flood; operator STOP button overwhelmed
+    mqtt-poison     Stage 3b — retained-state poisoning; dashboard lies
+    mqtt-takeover   Stage 4 — client-ID hijack; controller evicted from broker
+
+  Modbus mode (requires --profile modbus):
+    modbus-recon    Stage 1 — port scan, unit ID enumeration, register dump
+    modbus-inject   Stage 2 — direct register write + E-stop coil trip
+    modbus-replay   Stage 3 — raw PDU replay; TID not validated
+
+Environment overrides:
+  BROKER      MQTT broker hostname (default: mosquitto)
+  CONTROLLER  Modbus outstation hostname (default: controller)
+  TRAIN       Train ID (default: t1)
+  DURATION    Flood duration in seconds for mqtt-flood (default: 10)
+  PORT        Modbus TCP port (default: 5020)
+EOF
+}
+
+if [[ $# -eq 0 || "$1" == "--help" || "$1" == "-h" ]]; then
+  usage
+  exit 0
+fi
+
+if [[ "$1" == "--list" ]]; then
+  echo "Available scenarios:"
+  ls "$ATTACKS_DIR" | grep -v 'run-attack' | sed 's/^/  /'
+  exit 0
+fi
+
+SCENARIO="$1"
+shift
+
+SCRIPT="${ATTACKS_DIR}/${SCENARIO}"
+
+if [[ ! -f "$SCRIPT" ]]; then
+  echo "ERROR: Unknown scenario '${SCENARIO}'" >&2
+  echo "" >&2
+  usage >&2
+  exit 1
+fi
+
+if [[ ! -x "$SCRIPT" ]]; then
+  echo "ERROR: ${SCRIPT} is not executable" >&2
+  exit 1
+fi
+
+exec "$SCRIPT" "$@"

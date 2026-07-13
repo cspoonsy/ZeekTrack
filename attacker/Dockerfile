@@ -46,10 +46,16 @@ ENV PATH="/opt/attack/bin:${PATH}"
 # VULNERABILITIES.md so the trainer doesn't have to dictate URLs.
 COPY cheatsheet.md /opt/cheatsheet.md
 
+# Named attack scenarios — callable as `run-attack <name>` from inside the
+# container, or `docker exec choochoo-attacker run-attack <name>` from the host.
+COPY attacks/ /opt/attacks/
+RUN chmod +x /opt/attacks/* && \
+    ln -s /opt/attacks/run-attack /usr/local/bin/run-attack
+
 # Drop the user into /work so any artifacts they create end up in a known
 # place. The compose file mounts the project read-only at /project.
 WORKDIR /work
 
 # Long-running idle command so the container stays up; trainee execs in.
 # Plain `bash -c` (not `-l`) so the venv on $PATH set above sticks.
-CMD ["bash", "-c", "echo 'ChooChoo attacker container ready. cat /opt/cheatsheet.md to begin.'; exec sleep infinity"]
+CMD ["bash", "-c", "echo 'ChooChoo attacker container ready. run-attack --list to see scenarios.'; /opt/attacks/noise-attendee > /tmp/noise-attendee.log 2>&1 & exec sleep infinity"]

