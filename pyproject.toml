@@ -1,0 +1,49 @@
+[project]
+name = "choochoo"
+version = "0.1.0"
+description = "MQTT-driven control plane for a Lego Powered Up train."
+readme = "README.md"
+authors = [
+    { name = "cody.spooner", email = "cody.spooner@corelight.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "click>=8.3.3",
+    "fastapi>=0.136.1",
+    "paho-mqtt>=2.1.0",
+    "pydantic>=2.13.4",
+    "pymodbus>=3.6,<3.8",
+    "uvicorn[standard]>=0.47.0",
+]
+
+[project.optional-dependencies]
+# BLE driver only needed on the Raspberry Pi that talks to the real train.
+pi = [
+    "bleak>=3",
+    "pylgbst>=1.2.3",
+]
+
+[project.scripts]
+choochoo = "choochoo:main"
+
+[build-system]
+requires = ["uv_build>=0.11.14,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "ruff>=0.15.13",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

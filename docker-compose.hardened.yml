@@ -1,0 +1,26 @@
+# Hardened broker profile.
+#
+#   ./scripts/bootstrap-hardened.sh           # one-time: certs + passwords
+#   docker compose -f docker-compose.hardened.yml up -d
+#   ./scripts/run-hardened.sh controller
+#
+# Replaces (does not extend) the baseline compose. Plaintext 1883/9001 are
+# gone; only TLS 8883 is exposed.
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: choochoo-mosquitto-hardened
+    ports:
+      - "8883:8883"
+    volumes:
+      - ./mosquitto/config-hardened:/mosquitto/config:ro
+      - ./mosquitto/certs:/mosquitto/certs:ro
+      - ./mosquitto/auth:/mosquitto/auth:ro
+      - mosquitto-data-hardened:/mosquitto/data
+      - mosquitto-log-hardened:/mosquitto/log
+    restart: unless-stopped
+
+volumes:
+  mosquitto-data-hardened:
+  mosquitto-log-hardened:

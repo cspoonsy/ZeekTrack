@@ -1,0 +1,56 @@
+# Vector config for the ChooChoo Zeek → Gravwell pipeline.
+#
+# Tails every *.log file Zeek writes into the shared /zeek-logs volume and
+# ships each line, verbatim, over plain TCP to Gravwell's simple_relay
+# listener. Zeek's LogAscii::use_json=T (see zeek/local.zeek) means each
+# line is already a well-formed JSON document, so no parse-and-re-encode
+# step is needed — the `text` codec passes `.message` through unchanged.
+#
+# To swap Gravwell for another SIEM later: change the `sinks:` block. The
+# rest of the pipeline stays. To dual-ship, add a second sink and list it
+# alongside `gravwell` in the outputs — sources and transforms are shared.
+
+data_dir: /var/lib/vector
+
+sources:
+  zeek:
+    type: file
+    include:
+      - /zeek-logs/*.log
+    # Zeek writes stdout/stderr redirects and reporter/broker chatter here
+    # too. Skip the ones that aren't per-event JSON so Gravwell only sees
+    # meaningful protocol logs.
+    exclude:
+      - /zeek-logs/stdout.log
+      - /zeek-logs/stderr.log
+      - /zeek-logs/reporter.log
+      - /zeek-logs/broker.log
+      - /zeek-logs/loaded_scripts.log
+      - /zeek-logs/packet_filter.log
+      - /zeek-logs/stats.log
+    read_from: beginning
+    # Fingerprint by content, not device+inode. Docker volume mounts can
+    # reuse inodes across rotation and cause Vector to skip a fresh file.
+    # Zeek's first line of every log is a unique header ({"_path":"conn",...}),
+    # so hashing one line is enough to disambiguate every stream.
+    fingerprint:
+      strategy: checksum
+      lines: 1
+
+sinks:
+  gravwell:
+    type: socket
+    inputs: [zeek]
+    mode: tcp
+    # Ship to Gravwell's simple_relay ingester container, which forwards
+    # to the indexer over :4023 using the shared Ingest-Secret.
+    address: simple-relay:7777
+    encoding:
+      codec: text
+    framing:
+      method: newline_delimited
+    # Buffer to disk so a Gravwell restart / hiccup doesn't drop events.
+    buffer:
+      type: disk
+      max_size: 536870912   # 512 MiB — plenty for a training rig
+      when_full: block
