@@ -1,0 +1,442 @@
+{
+  "Name": "ChooChoo \u2014 Live Feed [15m] (Spoiler-Free)",
+  "Description": "Crowd-facing display. Shows live traffic activity without revealing topics, payloads, or command structure. Safe to leave on a monitor facing attendees.",
+  "Created": "2026-07-10T16:46:36.688151543Z",
+  "Updated": "2026-07-15T17:53:29.311274418Z",
+  "Data": {
+    "timeframe": {
+      "durationString": "PT15M",
+      "timeframe": "iso",
+      "timezone": null,
+      "start": null,
+      "end": null
+    },
+    "searches": [
+      {
+        "alias": "total",
+        "query": "tag=zeek count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "unique_ips",
+        "query": "tag=zeek | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | unique \"id.orig_h\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "mqtt_count",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "modbus_count",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "rate",
+        "query": "tag=zeek | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "proto_mix",
+        "query": "tag=zeek grep \"{\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | regex \"\\\"_path\\\":\\\"(?P<channel>mqtt|modbus|http|conn)[_\\\"]\" | json \"id.orig_h\" | stats count by \"id.orig_h\" channel | stackgraph \"id.orig_h\" channel count",
+        "color": null
+      },
+      {
+        "alias": "ip_activity",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 15m | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "conn_states",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json conn_state | count by conn_state over 15m | chart count by conn_state",
+        "color": null
+      },
+      {
+        "alias": "gauge_iot_events",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | count | gauge count",
+        "color": null
+      },
+      {
+        "alias": "gauge_ot_events",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | count | gauge count",
+        "color": null
+      },
+      {
+        "alias": "cmd_sent_count",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep \"cmd/\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "exploration_breadth",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" \"id.resp_h\" | unique \"id.orig_h\" \"id.resp_h\" | count by \"id.orig_h\" | sort by count desc | table \"id.orig_h\" count",
+        "color": null
+      },
+      {
+        "alias": "protocol_leaderboard",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_subscribe\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" | sort by count desc | table \"id.orig_h\" count",
+        "color": null
+      },
+      {
+        "alias": "discovery_count",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_subscribe\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | unique \"id.orig_h\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "network_fdg",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" \"id.resp_h\" | fdg \"id.orig_h\" \"id.resp_h\"",
+        "color": null
+      },
+      {
+        "alias": "uri_wordcloud",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"http\\\"\" | grep \"\\\"id.resp_p\\\":8000\"  | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json uri | stats count by uri | wordcloud count",
+        "color": null
+      },
+      {
+        "alias": "train_power_gauge",
+        "query": " tag=zeek grep \"\\\"topic\\\":\\\"choochoo/train/t1/state\\\"\" | regex \"power..:(?P<power>[0-9]+)\" | sort by TIMESTAMP desc | limit 1 | gauge (power 0 100 \"Power\") \n",
+        "color": null
+      },
+      {
+        "alias": "train_power_line",
+        "query": "tag=zeek grep \"\\\"topic\\\":\\\"choochoo/train/t1/state\\\"\" | regex \"power..:(?P<power>[0-9]+)\" | mean power over 30s | chart mean",
+        "color": null
+      },
+      {
+        "alias": "train_direction_current",
+        "query": "tag=zeek grep \"\\\"topic\\\":\\\"choochoo/train/t1/state\\\"\" | regex \"direction.{1,5}(?P<direction>forward|reverse|stop)\" | sort by TIMESTAMP desc | limit 1 | table direction",
+        "color": null
+      },
+      {
+        "alias": "data_volume_by_service",
+        "query": "  tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v\n  \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v\n  \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" orig_bytes service | stats sum(orig_bytes) as bytes by \"id.orig_h\" service | stackgraph\n  \"id.orig_h\" service bytes",
+        "color": null
+      }
+    ],
+    "tiles": [
+      {
+        "id": 1,
+        "title": "Total Network Events \u2014 all traffic Zeek has seen in last 15 min",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 3,
+          "x": 14,
+          "y": 13
+        },
+        "searchesIndex": 0,
+        "rendererOptions": {}
+      },
+      {
+        "id": 2,
+        "title": "Unique Source IPs \u2014 number of distinct participants active now",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 3,
+          "x": 14,
+          "y": 10
+        },
+        "searchesIndex": 1,
+        "rendererOptions": {}
+      },
+      {
+        "id": 3,
+        "title": "IoT Protocol Events \u2014 activity on the wireless train channel",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 4,
+          "x": 8,
+          "y": 0
+        },
+        "searchesIndex": 2,
+        "rendererOptions": {}
+      },
+      {
+        "id": 4,
+        "title": "Industrial Protocol Events \u2014 activity on the OT control channel",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 4,
+          "x": 10,
+          "y": 0
+        },
+        "searchesIndex": 3,
+        "rendererOptions": {}
+      },
+      {
+        "id": 5,
+        "title": "Live Activity Rate per Participant \u2014 spikes show probes and attacks in progress",
+        "renderer": "lineChart",
+        "hideZoom": false,
+        "span": {
+          "col": 9,
+          "row": 6,
+          "x": 0,
+          "y": 10
+        },
+        "searchesIndex": 4,
+        "rendererOptions": {
+          "chartType": "line",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "Orientation": "v",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no"
+        }
+      },
+      {
+        "id": 6,
+        "title": "Protocol Activity \u2014 Cumulative Channel Exploration",
+        "renderer": "stackgraph",
+        "hideZoom": false,
+        "span": {
+          "col": 5,
+          "row": 6,
+          "x": 0,
+          "y": 16
+        },
+        "searchesIndex": 5,
+        "rendererOptions": {}
+      },
+      {
+        "id": 7,
+        "title": "Participant Activity Ranking \u2014 most active IPs by connection count",
+        "renderer": "categoryBarChart",
+        "hideZoom": true,
+        "span": {
+          "col": 7,
+          "row": 6,
+          "x": 9,
+          "y": 4
+        },
+        "searchesIndex": 6,
+        "rendererOptions": {
+          "chartType": "bar",
+          "Orientation": "v",
+          "IncludeOther": "yes",
+          "SortCategoricalAxisBy": "value"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Protocol Breakdown per Participant",
+        "renderer": "stackgraph",
+        "hideZoom": true,
+        "span": {
+          "col": 5,
+          "row": 6,
+          "x": 11,
+          "y": 16
+        },
+        "searchesIndex": 19,
+        "rendererOptions": {}
+      },
+      {
+        "id": 9,
+        "title": "Connection Outcomes \u2014 SF=normal, RSTO/RSTOS=scan or probe, S0=unanswered",
+        "renderer": "donutChart",
+        "hideZoom": true,
+        "span": {
+          "col": 3,
+          "row": 6,
+          "x": 5,
+          "y": 16
+        },
+        "searchesIndex": 7,
+        "rendererOptions": {
+          "chartType": "donut"
+        }
+      },
+      {
+        "id": 10,
+        "title": "IoT Channel Activity \u2014 MQTT events (gauge)",
+        "renderer": "gauge",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 4,
+          "x": 12,
+          "y": 0
+        },
+        "searchesIndex": 8,
+        "rendererOptions": {}
+      },
+      {
+        "id": 11,
+        "title": "OT Channel Activity \u2014 Modbus events (gauge)",
+        "renderer": "gauge",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 4,
+          "x": 14,
+          "y": 0
+        },
+        "searchesIndex": 9,
+        "rendererOptions": {}
+      },
+      {
+        "id": 13,
+        "title": "Train Power Level \u2014 History",
+        "renderer": "lineChart",
+        "hideZoom": true,
+        "span": {
+          "col": 9,
+          "row": 6,
+          "x": 0,
+          "y": 4
+        },
+        "searchesIndex": 17,
+        "rendererOptions": {
+          "chartType": "line",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "Orientation": "v",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no"
+        }
+      },
+      {
+        "id": 14,
+        "title": "Commands Sent to Control Channel",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 4,
+          "x": 4,
+          "y": 0
+        },
+        "searchesIndex": 10,
+        "rendererOptions": {}
+      },
+      {
+        "id": 15,
+        "title": "Exploration Breadth \u2014 unique targets reached per participant",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 6,
+          "x": 12,
+          "y": 10
+        },
+        "searchesIndex": 11,
+        "rendererOptions": {}
+      },
+      {
+        "id": 16,
+        "title": "Discovery Leaderboard \u2014 IPs That Found the Control Plane",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 3,
+          "row": 6,
+          "x": 9,
+          "y": 10
+        },
+        "searchesIndex": 12,
+        "rendererOptions": {}
+      },
+      {
+        "id": 17,
+        "title": "Unique IPs That Found the Broker",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 4,
+          "x": 6,
+          "y": 0
+        },
+        "searchesIndex": 13,
+        "rendererOptions": {}
+      },
+      {
+        "id": 18,
+        "title": "Train Status",
+        "renderer": "gauge",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 4,
+          "x": 0,
+          "y": 0
+        },
+        "searchesIndex": 16,
+        "rendererOptions": {}
+      },
+      {
+        "id": 19,
+        "title": "Network Topology \u2014 Who Is Connecting to What",
+        "renderer": "fdg",
+        "hideZoom": true,
+        "span": {
+          "col": 3,
+          "row": 6,
+          "x": 8,
+          "y": 16
+        },
+        "searchesIndex": 14,
+        "rendererOptions": {
+          "Layout": "circular",
+          "Labels": "yes",
+          "IncludeOther": "yes",
+          "CurveEdges": "yes"
+        }
+      },
+      {
+        "id": 20,
+        "title": "Web UI \u2014 What People Are Looking For",
+        "renderer": "wordcloud",
+        "hideZoom": true,
+        "span": {
+          "col": 16,
+          "row": 6,
+          "x": 0,
+          "y": 22
+        },
+        "searchesIndex": 15,
+        "rendererOptions": {}
+      },
+      {
+        "id": 178412598441119,
+        "title": "Current Direction \u2014 forward / reverse / stop",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 2,
+          "row": 4,
+          "x": 2,
+          "y": 0
+        },
+        "searchesIndex": 18,
+        "rendererOptions": {}
+      }
+    ],
+    "liveUpdateInterval": 10,
+    "linkZooming": true,
+    "grid": {},
+    "version": 2
+  },
+  "Labels": null,
+  "Synced": false,
+  "Can": {
+    "Delete": true,
+    "Modify": true,
+    "Share": true
+  }
+}

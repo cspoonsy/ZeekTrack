@@ -12,7 +12,9 @@
 set -euo pipefail
 
 MODE="${1:-mqtt}"
-COMPOSE="docker compose -f $(dirname "$0")/../docker-compose.fake.yml"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMPOSE="docker compose -f ${SCRIPT_DIR}/../docker-compose.fake.yml"
+DASHBOARDS_DIR="${SCRIPT_DIR}/../gravwell/dashboards"
 
 case "$MODE" in
   mqtt)
@@ -54,6 +56,42 @@ case "$MODE" in
     exit 1
     ;;
 esac
+
+echo ""
+echo "Provisioning Gravwell dashboards..."
+provision_dashboards() {
+  local retries=30
+  local jwt=""
+
+  # Wait for Gravwell to accept logins
+  until jwt=$(curl -s -X POST http://localhost:8080/api/login \
+      -H 'Content-Type: application/json' \
+      -d '{"User":"admin","Pass":"changeme"}' \
+      | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['JWT'])" 2>/dev/null) \
+      && [ -n "$jwt" ]; do
+    retries=$((retries - 1))
+    [ $retries -le 0 ] && echo "  Gravwell not ready after 30s — skipping dashboard import" && return
+    sleep 1
+  done
+
+  local imported=0
+  for f in "${DASHBOARDS_DIR}"/*.json; do
+    name=$(python3 -c "import json; print(json.load(open('$f')).get('Name','?'))")
+    result=$(curl -s -X POST \
+      -H "Authorization: Bearer $jwt" \
+      -H "Content-Type: application/json" \
+      http://localhost:8080/api/dashboards \
+      --data-binary "@$f")
+    if python3 -c "import sys,json; r=json.load(sys.stdin); exit(0 if 'ID' in r else 1)" <<< "$result" 2>/dev/null; then
+      echo "  ✓ $name"
+      imported=$((imported + 1))
+    else
+      echo "  ✗ $name (already exists or error — skipping)"
+    fi
+  done
+  echo "  $imported dashboard(s) imported."
+}
+provision_dashboards
 
 echo ""
 echo "Train UI (MQTT):   http://localhost:8000"

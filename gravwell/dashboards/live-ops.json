@@ -1,0 +1,417 @@
+{
+  "Name": "ChooChoo \u2014 Live Ops [15m]",
+  "Description": "Real-time 15-minute rolling view of all train network activity. Primary operator dashboard during the DefCon event.",
+  "Created": "2026-07-10T16:44:12.159068629Z",
+  "Updated": "2026-07-15T15:01:17.239223386Z",
+  "Data": {
+    "timeframe": {
+      "durationString": "PT15M",
+      "timeframe": "iso",
+      "timezone": null,
+      "start": null,
+      "end": null
+    },
+    "searches": [
+      {
+        "alias": "total_events",
+        "query": "tag=zeek count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "unique_attackers",
+        "query": "tag=zeek | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | unique \"id.orig_h\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "mqtt_cmds",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep \"cmd/\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "modbus_writes",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | json \"id.orig_h\" func | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "topic_hit_count",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | json topic | count by topic over 30s | chart count by topic",
+        "color": null
+      },
+      {
+        "alias": "modbus_func_breakdown",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" func | count by func over 30s | chart count by func",
+        "color": null
+      },
+      {
+        "alias": "activity_rate",
+        "query": "tag=zeek | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "recon_vs_action",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_subscribe\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "conn_states",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json conn_state | count by conn_state over 30s | chart count by conn_state",
+        "color": null
+      },
+      {
+        "alias": "mqtt_cmd_rate",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep \"cmd/\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "active_mqtt_cmds",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep \"cmd/\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
+        "color": null
+      },
+      {
+        "alias": "active_modbus_writes",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | json \"id.orig_h\" func tid | table \"id.orig_h\" func tid",
+        "color": null
+      },
+      {
+        "alias": "gauge_mqtt_cmds",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep \"cmd/\" | count | gauge count",
+        "color": null
+      },
+      {
+        "alias": "gauge_modbus_writes",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | json \"id.orig_h\" func | count | gauge count",
+        "color": null
+      },
+      {
+        "alias": "gauge_train_stops",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep \"cmd/stop\" | count | gauge count",
+        "color": null
+      },
+      {
+        "alias": "web_visitors_rate",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"http\\\"\" | grep \"\\\"id.resp_p\\\":8000\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "suspicious_web_detail",
+        "query": "tag=zeek grep \"\"_path\":\"http\"\" | grep \"\"id.resp_p\":8000\" | grep \"passwd\" | json \"id.orig_h\" method uri | table \"id.orig_h\" method uri",
+        "color": null
+      }
+    ],
+    "tiles": [
+      {
+        "id": 1,
+        "title": "Total Events \u2014 all Zeek records",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 3,
+          "row": 3,
+          "x": 0,
+          "y": 0
+        },
+        "searchesIndex": 0,
+        "rendererOptions": {}
+      },
+      {
+        "id": 2,
+        "title": "Active Attackers \u2014 unique non-infra IPs",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 3,
+          "row": 3,
+          "x": 3,
+          "y": 0
+        },
+        "searchesIndex": 1,
+        "rendererOptions": {}
+      },
+      {
+        "id": 3,
+        "title": "MQTT Commands \u2014 cmd/ topic hits",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 3,
+          "row": 3,
+          "x": 6,
+          "y": 0
+        },
+        "searchesIndex": 2,
+        "rendererOptions": {}
+      },
+      {
+        "id": 4,
+        "title": "Modbus Writes \u2014 register write attempts",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 3,
+          "row": 3,
+          "x": 9,
+          "y": 0
+        },
+        "searchesIndex": 3,
+        "rendererOptions": {}
+      },
+      {
+        "id": 5,
+        "title": "MQTT Topic Hit Count \u2014 which topics are being targeted",
+        "renderer": "lineChart",
+        "hideZoom": false,
+        "span": {
+          "col": 5,
+          "row": 5,
+          "x": 0,
+          "y": 7
+        },
+        "searchesIndex": 4,
+        "rendererOptions": {
+          "Orientation": "bar",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no"
+        }
+      },
+      {
+        "id": 6,
+        "title": "Modbus Function Breakdown \u2014 recon reads vs control writes",
+        "renderer": "lineChart",
+        "hideZoom": false,
+        "span": {
+          "col": 3,
+          "row": 5,
+          "x": 5,
+          "y": 7
+        },
+        "searchesIndex": 5,
+        "rendererOptions": {
+          "Orientation": "pie",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no"
+        }
+      },
+      {
+        "id": 7,
+        "title": "Live Activity Rate \u2014 event rate per IP over time",
+        "renderer": "lineChart",
+        "hideZoom": false,
+        "span": {
+          "col": 4,
+          "row": 5,
+          "x": 8,
+          "y": 7
+        },
+        "searchesIndex": 6,
+        "rendererOptions": {
+          "Orientation": "stacked",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no"
+        }
+      },
+      {
+        "id": 8,
+        "title": "MQTT Subscriptions per IP \u2014 who is doing recon",
+        "renderer": "lineChart",
+        "hideZoom": false,
+        "span": {
+          "col": 4,
+          "row": 5,
+          "x": 0,
+          "y": 12
+        },
+        "searchesIndex": 7,
+        "rendererOptions": {
+          "Orientation": "bar",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no"
+        }
+      },
+      {
+        "id": 9,
+        "title": "Connection Outcomes \u2014 SF=clean S0=scan RSTO=reset",
+        "renderer": "lineChart",
+        "hideZoom": false,
+        "span": {
+          "col": 4,
+          "row": 5,
+          "x": 4,
+          "y": 12
+        },
+        "searchesIndex": 8,
+        "rendererOptions": {
+          "Orientation": "pie",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no"
+        }
+      },
+      {
+        "id": 10,
+        "title": "MQTT Command Rate \u2014 cmd/ hits per IP per minute",
+        "renderer": "lineChart",
+        "hideZoom": false,
+        "span": {
+          "col": 4,
+          "row": 5,
+          "x": 8,
+          "y": 12
+        },
+        "searchesIndex": 9,
+        "rendererOptions": {
+          "Orientation": "stacked",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no"
+        }
+      },
+      {
+        "id": 11,
+        "title": "\u26a1 ACTIVE MQTT COMMANDS \u2014 attendee cmd/ publishes right now",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 5,
+          "x": 0,
+          "y": 17
+        },
+        "searchesIndex": 10,
+        "rendererOptions": {}
+      },
+      {
+        "id": 12,
+        "title": "\u26a1 ACTIVE MODBUS WRITES \u2014 register writes right now",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 5,
+          "x": 6,
+          "y": 17
+        },
+        "searchesIndex": 11,
+        "rendererOptions": {}
+      },
+      {
+        "id": 13,
+        "title": "MQTT Command Volume \u2014 cmd/ hits (gauge)",
+        "renderer": "gauge",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 0,
+          "y": 3
+        },
+        "searchesIndex": 12,
+        "rendererOptions": {}
+      },
+      {
+        "id": 14,
+        "title": "Modbus Write Volume \u2014 register writes (gauge)",
+        "renderer": "gauge",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 4,
+          "y": 3
+        },
+        "searchesIndex": 13,
+        "rendererOptions": {}
+      },
+      {
+        "id": 15,
+        "title": "Train Stop Attempts \u2014 commands (gauge)",
+        "renderer": "gauge",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 8,
+          "y": 3
+        },
+        "searchesIndex": 14,
+        "rendererOptions": {}
+      },
+      {
+        "id": 16,
+        "title": "Web UI \u2014 Visitors (Live)",
+        "renderer": "lineChart",
+        "hideZoom": true,
+        "span": {
+          "col": 8,
+          "row": 4,
+          "x": 0,
+          "y": 22
+        },
+        "searchesIndex": 15,
+        "rendererOptions": {
+          "chartType": "area",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "Orientation": "v",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no"
+        }
+      },
+      {
+        "id": 17,
+        "title": "Suspicious Web Requests",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 8,
+          "y": 22
+        },
+        "searchesIndex": 16,
+        "rendererOptions": {}
+      }
+    ],
+    "liveUpdateInterval": 10,
+    "linkZooming": true,
+    "grid": {},
+    "version": 2
+  },
+  "Labels": null,
+  "Synced": false,
+  "Can": {
+    "Delete": true,
+    "Modify": true,
+    "Share": true
+  }
+}
