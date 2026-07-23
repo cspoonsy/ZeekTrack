@@ -54,6 +54,7 @@ git clone <repo-url> choochoo && cd choochoo
 ├── docker-compose.yml               # Mosquitto broker only (legacy / host path)
 ├── docker-compose.hardened.yml      # TLS + auth + ACL Mosquitto
 ├── docker-compose.fake.yml          # full hardwareless stack (mqtt | modbus profiles)
+├── docker-compose.real.yml          # hardware stack: web/broker in containers, controller bare-metal
 ├── pyproject.toml + uv.lock         # uv-managed Python deps
 ├── src/choochoo/
 │   ├── protocol.py                  # MQTT topic names + Pydantic schemas
@@ -98,10 +99,21 @@ after cloning.
 
 ## Deployment matrix
 
-|                | Hardwareless (FakeTrain)                 | Hardware (real BLE train)                                       |
-|----------------|------------------------------------------|-----------------------------------------------------------------|
-| **MQTT**       | 3 containers: web + mosquitto + controller-fake | 2 containers (web + mosquitto) + controller bare-metal on the Pi (BLE) |
-| **Modbus**     | 2 containers: web + controller-fake      | 1 container (web) + controller bare-metal on the Pi (BLE)       |
+Two compose files, one per posture. Pick by whether you have a real
+train on the table.
+
+|                | Hardwareless — `docker-compose.fake.yml`                        | Hardware — `docker-compose.real.yml`                                  |
+|----------------|-----------------------------------------------------------------|----------------------------------------------------------------------|
+| **MQTT**       | 3 containers: web + mosquitto + controller-fake                 | 2 containers (web + mosquitto) + controller bare-metal on the host (BLE) |
+| **Modbus**     | 2 containers: web + controller-fake                             | 1 container (web) + controller bare-metal on the host (BLE)          |
+
+The `.real.yml` file has no controller service on purpose: the
+controller has to run on whatever machine owns the BLE radio (a
+Raspberry Pi, or a Mac / Linux workstation with Bluetooth), because
+Docker Desktop on macOS has no BLE passthrough and Linux would need
+`--privileged` + host networking to get one. The containers in
+`.real.yml` reach the host controller via `host.docker.internal:5020`
+(Modbus) or by publishing 1883 on the host loopback (MQTT).
 
 ## Networking reference
 
@@ -136,7 +148,7 @@ same compose network:
 | `mosquitto`              | `mosquitto`    | 1883/tcp               | MQTT             | Anonymous broker (baseline profile) |
 | `controller-mqtt`        | *(default)*    | —                      | MQTT client      | Bridges MQTT ↔ train |
 | `web-mqtt`               | *(default)*    | 8000/tcp               | HTTP             | FastAPI UI (MQTT mode) |
-| `controller-modbus`      | `controller`   | 5020/tcp               | Modbus/TCP       | Modbus outstation (unit ID 1) |
+| `controller-modbus`      | `controller`   | 5020/tcp               | Modbus/TCP       | Modbus outstation (unit ID 1) — `.fake.yml` only; under `.real.yml` the outstation runs on the host at `host.docker.internal:5020` |
 | `web-modbus`             | *(default)*    | 8000/tcp               | HTTP             | FastAPI UI (Modbus mode) |
 | `attacker`               | `attacker`     | —                      | shell / tools    | Kali box with `nmap`, `mosquitto-clients`, `mbpoll`, `pymodbus`, `tcpdump` |
 | `intranet`               | `intranet`     | 80/tcp                 | HTTP             | Fake corporate portal (`http://intranet/`) |
@@ -362,9 +374,116 @@ Trainer answer key (host-side, never inside the container):
 - `attacker/SOLUTIONS.md` — suggested progression with concrete payloads
 - `VULNERABILITIES.md` — full vulnerability catalog with Zeek detection hooks
 
+## Quick start — real train on Mac / Linux workstation (hybrid)
+
+For local hardware demos where the developer machine has the BLE
+radio — a Mac with Bluetooth permission, or a Linux box with `bluez`.
+The controller runs on the host (owns BLE); everything else runs in
+containers via `docker-compose.real.yml`. Two terminals, one per role.
+
+**Prerequisites — install the BLE extra once:**
+
+```sh
+uv sync --extra pi
+```
+
+The extra is called `pi` for historical reasons but works fine on
+macOS (bleak's CoreBluetooth backend). On macOS, grant your terminal
+Bluetooth permission the first time it scans: System Settings →
+Privacy & Security → Bluetooth.
+
+### Modbus mode (Enterprise / OT)
+
+```sh
+# Terminal 1 — bring up the web UI in a container. It'll poll the
+# host outstation at host.docker.internal:5020.
+docker compose -f docker-compose.real.yml --profile modbus up --build -d
+
+# Terminal 2 — controller runs bare-metal on this Mac. Owns the BLE
+# radio, hosts the Modbus outstation on 0.0.0.0:5020.
+CHOOCHOO_PROTOCOL=modbus \
+CHOOCHOO_TRAIN=buwizz \
+CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
+    uv run choochoo -v controller
+```
+
+Open <http://localhost:8000>. When the controller logs
+`connected to BuWizz at <mac-addr>` and the outstation starts
+responding to polls, the header pill flips to **BLE • Connected**
+(green) and the topology line linking the controller to the train
+turns solid green. If the pill stays at `BLE • …`, the web
+container can't reach the host outstation — see the troubleshooting
+sub-section below.
+
+### MQTT mode (IoT)
+
+```sh
+# Terminal 1 — Mosquitto broker + web UI in containers. The broker
+# publishes 1883 on the host loopback so the bare-metal controller
+# can reach it at localhost:1883.
+docker compose -f docker-compose.real.yml --profile mqtt up --build -d
+
+# Terminal 2 — controller runs bare-metal on this Mac.
+CHOOCHOO_TRAIN=buwizz \
+CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
+CHOOCHOO_BROKER=localhost \
+    uv run choochoo -v controller
+```
+
+### Stacking defender / attacker / noise on the real train
+
+Same `--profile` flags as `.fake.yml`:
+
+```sh
+docker compose -f docker-compose.real.yml \
+    --profile modbus --profile attacker --profile noise up -d
+```
+
+Caveat for **Modbus + Zeek**: the outstation lives on the host, not
+inside Docker's netns, so the `sensor` profile can't see the Modbus
+wire under `.real.yml`. For real Modbus defender visibility on the
+physical train, run Zeek on the host directly (or mirror the switch
+port into a Zeek box on the same LAN).
+
+### Troubleshooting the hybrid setup
+
+**Pill stays on `BLE • …` forever.** The web container's ModbusBridge
+can't reach the host outstation. Check, in order:
+
+```sh
+# 1. Is the outstation actually bound on the host?
+lsof -nP -iTCP:5020 -sTCP:LISTEN
+
+# 2. Only ONE controller instance should be listed. A stale process
+#    from a previous run will silently prevent the new one from binding.
+ps aux | grep -i choochoo | grep -v grep
+
+# 3. Can the web container reach the host?
+docker exec choochoo-web-modbus-real python3 -c \
+    "import socket; s=socket.socket(); s.settimeout(2); \
+     s.connect(('host.docker.internal',5020)); print('tcp ok')"
+
+# 4. Watch the bridge logs live for pymodbus errors.
+docker logs -f choochoo-web-modbus-real
+```
+
+If step 3 fails on Linux and `host.docker.internal` doesn't resolve,
+`docker-compose.real.yml` already sets
+`extra_hosts: "host.docker.internal:host-gateway"`; if you still see
+resolution failures, replace it with the Mac / Linux LAN IP.
+
+**`ModuleNotFoundError: No module named 'bleak'`** when starting the
+controller — you forgot `uv sync --extra pi`.
+
+**BuWizz debug spam floods the terminal** (`peripheral_didUpdateValueForCharacteristic_error_`
+lines). These are CoreBluetooth's notification-callback selector names,
+**not** errors — the trailing `error_` is just Objective-C's parameter
+slot. Drop the `-v` flag to quiet them.
+
 ## Quick start — host, no hardware (legacy path)
 
-If you'd rather run the controller / web outside Docker (faster iteration):
+If you'd rather run the controller / web outside Docker with the
+FakeTrain backend (fastest inner loop for code changes):
 
 ```sh
 docker compose up -d                     # Mosquitto only
@@ -452,6 +571,14 @@ CHOOCHOO_PROTOCOL=modbus uv run choochoo web
 The web UI shows a colored **IOT / MQTT** or **ENTERPRISE / MODBUS** pill
 in the header, and the network topology panel auto-relabels itself to
 match. In Enterprise mode the broker disappears (Modbus is point-to-point).
+
+A second pill next to it — **BLE • Connected** (green, pulsing) /
+**BLE • Disconnected** (red) / **BLE • …** (muted, waiting on first
+state) — reflects the controller-to-train link. It reads the same
+`connected` bit that flows through the state channel (MQTT retained
+`state` topic, or the Modbus `DI_CONNECTED` discrete input), so it works
+identically in both control planes. The topology diagram's
+controller↔train segment recolors to match.
 
 ### Modbus point map
 

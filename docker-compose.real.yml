@@ -1,0 +1,225 @@
+# Real-train (hardware) demo: web / broker / defender tooling run in
+# containers; the *controller* runs bare-metal on whichever host owns
+# the BLE radio (Mac with Bluetooth permission, or a Pi). Docker Desktop
+# on macOS has no BLE passthrough, and on Linux it would need
+# --privileged + host networking. Keeping the controller off Docker also
+# matches the deploy story in deploy/choochoo-controller.service.
+#
+# Pick a control-plane profile:
+#
+#   docker compose -f docker-compose.real.yml --profile mqtt   up -d
+#   docker compose -f docker-compose.real.yml --profile modbus up -d
+#
+# Then on the host that owns BLE (this Mac), launch the controller:
+#
+#   # MQTT
+#   CHOOCHOO_TRAIN=buwizz CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
+#     CHOOCHOO_BROKER=localhost \
+#     uv run choochoo -v controller
+#
+#   # Modbus (outstation binds 0.0.0.0:5020 on the host)
+#   CHOOCHOO_PROTOCOL=modbus CHOOCHOO_TRAIN=buwizz CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
+#     uv run choochoo -v controller
+#
+# The web UI is at http://localhost:8000. Stack `--profile attacker`,
+# `--profile noise`, `--profile sensor`, `--profile gravwell` the same
+# way as in docker-compose.fake.yml.
+
+services:
+  # --- MQTT profile --------------------------------------------------------
+  # Broker is published on the host so the bare-metal controller can reach
+  # it at localhost:1883. Web UI runs in a container and talks to the
+  # broker over the internal compose network.
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: choochoo-mosquitto-real
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - mosquitto-data-real:/mosquitto/data
+    profiles: [mqtt]
+    restart: unless-stopped
+
+  web-mqtt:
+    image: choochoo:dev
+    build:
+      context: .
+    container_name: choochoo-web-mqtt-real
+    ports:
+      - "8000:8000"
+    command: ["web", "--http-port", "8000"]
+    environment:
+      CHOOCHOO_PROTOCOL: mqtt
+      CHOOCHOO_TRAIN_ID: t1
+      CHOOCHOO_BROKER: mosquitto
+      CHOOCHOO_BROKER_PORT: "1883"
+    depends_on:
+      - mosquitto
+    profiles: [mqtt]
+    restart: unless-stopped
+
+  # --- Modbus profile ------------------------------------------------------
+  # No broker; the web UI is a Modbus master pointing at the *host* where
+  # the bare-metal controller's outstation is listening on TCP/5020.
+  # `host.docker.internal` resolves to the host on Docker Desktop
+  # automatically; on Linux, extra_hosts maps it to the default gateway.
+  web-modbus:
+    image: choochoo:dev
+    build:
+      context: .
+    container_name: choochoo-web-modbus-real
+    ports:
+      - "8000:8000"
+    command: ["web", "--http-port", "8000"]
+    environment:
+      CHOOCHOO_PROTOCOL: modbus
+      CHOOCHOO_TRAIN_ID: t1
+      CHOOCHOO_BROKER: host.docker.internal
+      CHOOCHOO_MODBUS_PORT: "5020"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles: [modbus]
+    restart: unless-stopped
+
+  # --- Kali attacker (stack with either profile) ---------------------------
+  # Same posture as docker-compose.fake.yml: on the compose network, no
+  # published ports. Modbus attacks target `host.docker.internal:5020`
+  # instead of a `controller` service name.
+  attacker:
+    image: choochoo-attacker:dev
+    build:
+      context: ./attacker
+    container_name: choochoo-attacker-real
+    hostname: attacker
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles: [attacker]
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    restart: unless-stopped
+
+  # --- Background traffic --------------------------------------------------
+  intranet:
+    image: nginx:1.27-alpine
+    container_name: choochoo-intranet-real
+    hostname: intranet
+    volumes:
+      - ./noise/intranet/index.html:/usr/share/nginx/html/index.html:ro
+      - ./noise/intranet/status:/usr/share/nginx/html/status:ro
+      - ./noise/intranet/reports:/usr/share/nginx/html/reports:ro
+      - ./noise/intranet/files:/usr/share/nginx/html/files:ro
+      - ./noise/intranet/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    expose:
+      - "80"
+    profiles: [noise]
+    restart: unless-stopped
+
+  fileshare:
+    image: dperson/samba
+    container_name: choochoo-fileshare-real
+    hostname: fileshare
+    command: >
+      -p
+      -s "section7;/share;yes;yes;yes;all;none;all;Section 7 docs"
+    volumes:
+      - ./noise/share:/share:ro
+    expose:
+      - "139"
+      - "445"
+    profiles: [noise]
+    restart: unless-stopped
+
+  user:
+    image: choochoo-user:dev
+    build:
+      context: ./noise/user
+    container_name: choochoo-user-real
+    hostname: workstation
+    environment:
+      CHOOCHOO_DASHBOARD: ${CHOOCHOO_DASHBOARD:-http://web-mqtt:8000}
+      CHOOCHOO_INTRANET: http://intranet
+      CHOOCHOO_FILESHARE_HOST: fileshare
+      CHOOCHOO_FILESHARE_NAME: section7
+    depends_on:
+      - intranet
+      - fileshare
+    profiles: [noise]
+    restart: unless-stopped
+
+  # --- Zeek + Vector -------------------------------------------------------
+  # Same shape as .fake.yml but pinned to the real broker container name.
+  # For Modbus mode Zeek can't share the outstation's netns (it's on the
+  # host, not in Docker), so under --profile modbus you'd get better
+  # visibility running Zeek on the host directly. Kept here for the MQTT
+  # case, which is the common demo.
+  zeek:
+    image: choochoo-zeek:dev
+    build:
+      context: ./zeek
+    container_name: choochoo-zeek-real
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    volumes:
+      - zeek-logs-real:/logs
+    network_mode: "container:choochoo-mosquitto-real"
+    depends_on:
+      - mosquitto
+    profiles: [sensor]
+    restart: unless-stopped
+
+  vector:
+    image: timberio/vector:0.49.0-alpine
+    container_name: choochoo-vector-real
+    hostname: vector
+    volumes:
+      - ./vector/vector.yaml:/etc/vector/vector.yaml:ro
+      - zeek-logs-real:/zeek-logs:ro
+      - vector-data-real:/var/lib/vector
+    command: ["--config", "/etc/vector/vector.yaml"]
+    depends_on:
+      - zeek
+    profiles: [sensor]
+    restart: unless-stopped
+
+  # --- Gravwell -----------------------------------------------------------
+  gravwell:
+    image: gravwell/gravwell:latest
+    container_name: choochoo-gravwell-real
+    hostname: gravwell
+    ports:
+      - "8080:80"
+    expose:
+      - "4023"
+    volumes:
+      - gravwell-storage-real:/opt/gravwell/storage
+      - gravwell-log-real:/opt/gravwell/log
+    profiles: [gravwell]
+    restart: unless-stopped
+
+  simple-relay:
+    image: gravwell/simple_relay:latest
+    container_name: choochoo-simple-relay-real
+    hostname: simple-relay
+    expose:
+      - "7777"
+    volumes:
+      - ./gravwell/config/simple_relay.conf:/etc/simple_relay.conf.seed:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        cp -f /etc/simple_relay.conf.seed /opt/gravwell/etc/simple_relay.conf &&
+        exec /opt/gravwell/bin/manager
+    depends_on:
+      - gravwell
+    profiles: [gravwell]
+    restart: unless-stopped
+
+volumes:
+  mosquitto-data-real:
+  zeek-logs-real:
+  vector-data-real:
+  gravwell-storage-real:
+  gravwell-log-real:
