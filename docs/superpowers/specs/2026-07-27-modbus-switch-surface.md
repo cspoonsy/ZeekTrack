@@ -241,3 +241,11 @@ def test_switch_layout():
 - Limit-switch feedback for authoritative position.
 - Multi-switch on one outstation.
 - Documentation of the shared broker's dependency (both `web.py` and `modbus_controller.py` are now MQTT clients of the switch broker).
+- **BLE-stale-handle recovery in `CircuitCubeSwitch`.** Observed on macOS
+  after ~5 hours idle: `write_gatt_char` returns
+  "Service Discovery has not been performed yet" and the throw fails with
+  `BLE_ERROR`. The controller then sits with a dead handle until manually
+  restarted. Real fix: catch the specific bleak exception in `_run_burst`,
+  tear down and reconnect, then retry once. Non-blocking for the event
+  since the trainer can restart the controller between sessions, but
+  it will surprise trainees who leave a session running overnight.
