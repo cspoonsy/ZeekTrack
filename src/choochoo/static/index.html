@@ -149,11 +149,35 @@
     </label>
   </section>
 
+  <section class="switch">
+    <h2>Track switch
+      <span id="switch-conn-pill" class="pill link-pill link-pill--unknown">
+        <span class="link-dot"></span>
+        <span id="switch-conn-text">Switch &middot; &hellip;</span>
+      </span>
+    </h2>
+    <div class="switch-status">
+      <span>Position:</span>
+      <span id="switch-position-pill" class="switch-pill switch-pill--unknown">Unknown</span>
+      <span class="switch-cooldown-wrap">
+        <span>Cooldown:</span>
+        <progress id="switch-cooldown-bar" value="0" max="2000"></progress>
+        <span id="switch-cooldown-remaining">ready</span>
+      </span>
+    </div>
+    <div class="buttons switch-buttons">
+      <button id="btn-throw-straight" class="dir">Throw to Straight</button>
+      <button id="btn-throw-curve"    class="dir">Throw to Curve</button>
+    </div>
+    <div id="switch-last-event" class="switch-last-event"></div>
+  </section>
+
   <details>
     <summary>Debug</summary>
     <pre id="log"></pre>
   </details>
 </main>
 <script src="/static/app.js"></script>
+<script src="/static/switch.js"></script>
 </body>
 </html>

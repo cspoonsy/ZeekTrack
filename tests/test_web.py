@@ -51,3 +51,6 @@ def test_index_serves_html(client):
     r = c.get("/")
     assert r.status_code == 200
     assert "ChooChoo" in r.text
+    # Switch panel is always shipped regardless of train protocol.
+    assert 'id="switch-position-pill"' in r.text
+    assert "/static/switch.js" in r.text
