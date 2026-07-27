@@ -452,3 +452,41 @@ does not, by itself, fix the browser-side problem.**
   is the more honest depiction of real industrial networks. A "hardened"
   Modbus profile (TLS + per-client cert auth + a write-permitted ACL)
   could be added as a future stage to parallel the MQTT hardening.
+
+# Part 3 — Track-switch surface (MQTT)
+
+## S1 — Anonymous throw commands drive real hardware
+
+Baseline: same anonymous plaintext MQTT broker as V1. Anyone on the LAN
+can publish to `choochoo/switch/<id>/cmd/throw` and physically move the
+track under the train.
+
+**Attacker action**
+
+```sh
+mosquitto_pub -h <broker> -t choochoo/switch/sw1/cmd/throw \
+  -m '{"action":"throw","direction":"forward"}'
+```
+
+**Mitigation delta vs V1**
+
+The switch controller's client-side cooldown (`SWITCH_COOLDOWN_S`) and
+bounded burst (`SWITCH_BURST_MS`) mean an attacker cannot burn the motor
+out by spamming throws — but they can still divert the train at chosen
+moments. This is a *safety* mitigation, not a security mitigation.
+
+**What Zeek sees**
+
+Every throw is a distinct MQTT PUBLISH on
+`choochoo/switch/<id>/cmd/throw`. `mqtt_publish.log` will show the source
+IP in `id.orig_h`, the topic, and the JSON payload. A rapid burst of
+`throw` messages against the cooldown floor is a distinctive signature:
+throws arriving faster than one per 2 seconds cannot possibly all be
+legitimate operator input.
+
+**Detection hook**
+
+```zeek
+# Count PUBLISH events per source over a 10-second rolling window.
+# Alert on any source exceeding one throw per 2 s.
+```

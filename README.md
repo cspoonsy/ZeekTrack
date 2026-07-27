@@ -192,6 +192,10 @@ Client-side (controller / web / send):
 | `CHOOCHOO_TRAIN`          | `fake`           | Train backend: `fake` / `powered_up` / `buwizz`                    |
 | `CHOOCHOO_HUB_NAME`       | `Smart Hub`      | BLE-advertised name of the Powered Up hub                          |
 | `CHOOCHOO_BUWIZZ_NAME`    | `BuWizz3`        | BLE-advertised name of the BuWizz hub                              |
+| `CHOOCHOO_SWITCH_ID`      | `sw1`            | Track-switch identifier used in topic prefixes                     |
+| `CHOOCHOO_SWITCH_KIND`    | `fake`           | Switch backend: `fake` / `circuit_cube`                            |
+| `CHOOCHOO_CUBE_NAME`      | `Tenka`          | Substring match against the Circuit Cube's BLE advertised name     |
+| `CHOOCHOO_CUBE_PORT`      | `a`              | Circuit Cube motor port for this switch: `a` / `b` / `c`           |
 | `CHOOCHOO_USER` / `_PASSWORD` / `_TLS_CA` | *(unset)* | Broker auth + TLS for the hardened profile             |
 
 Noise-simulator (`user` service):
@@ -602,6 +606,40 @@ Unit ID `1`. No auth, no TLS — same baseline posture as MQTT mode.
 - `choochoo/train/<train_id>/cmd/light` — `{"brightness": 0-10}`
 - `choochoo/train/<train_id>/state` — retained; current direction / power / connection
 - `choochoo/train/<train_id>/discovery` — retained; device manifest (auto-discovery)
+
+### Track switch (BLE via Circuit Cubes)
+
+A second BLE device — a Circuit Cubes Bluetooth Bit — drives a Lego
+gear-rack track switch. The switch controller is a separate process that
+runs alongside the train controller; both share the same broker.
+
+Topics:
+
+- `choochoo/switch/<switch_id>/cmd/throw` — `{"action":"throw","direction":"forward|reverse"}`
+- `choochoo/switch/<switch_id>/state` — retained; current position + cooldown timestamps
+- `choochoo/switch/<switch_id>/event` — per-throw outcome (`ok` / `cooldown_rejected` / `ble_error`)
+- `choochoo/switch/<switch_id>/discovery` — retained; capabilities + safety envelope
+
+**Motor safety.** The switch motor burns out if held on. The controller
+enforces a bounded-burst timer (850 ms) at fixed power (130/255), plus a
+2 s cooldown per switch. Values live as constants in `switch_protocol.py`
+— retune if your gear ratio, rack length, or motor differs from the
+reference sw1 setup.
+
+Run bare-metal alongside the train controller (BLE is host-only):
+
+```sh
+CHOOCHOO_SWITCH_KIND=circuit_cube \
+CHOOCHOO_CUBE_NAME=Tenka \
+CHOOCHOO_CUBE_PORT=a \
+    uv run choochoo -v switch-controller
+```
+
+Ad-hoc throw from any host:
+
+```sh
+uv run choochoo switch-send throw forward
+```
 
 ## Security posture
 

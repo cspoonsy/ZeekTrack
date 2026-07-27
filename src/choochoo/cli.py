@@ -12,12 +12,22 @@ import paho.mqtt.publish as publish
 from choochoo import mqtt_auth
 from choochoo.controller import Controller, ControllerConfig
 from choochoo.protocol import Direction, LightCommand, MotorCommand, StopCommand, cmd_topic
+from choochoo.switch_controller import SwitchController, SwitchControllerConfig
+from choochoo.switch_protocol import ThrowCommand, switch_cmd_topic
 
 
 def _broker_opts(f):
     f = click.option("--host", default=lambda: os.environ.get("CHOOCHOO_BROKER", "localhost"))(f)
     f = click.option("--port", default=lambda: mqtt_auth.default_port(), type=int)(f)
     f = click.option("--train-id", default=lambda: os.environ.get("CHOOCHOO_TRAIN_ID", "t1"))(f)
+    return f
+
+
+def _switch_opts(f):
+    f = click.option(
+        "--switch-id",
+        default=lambda: os.environ.get("CHOOCHOO_SWITCH_ID", "sw1"),
+    )(f)
     return f
 
 
@@ -113,6 +123,34 @@ def send_stop(host: str, port: int, train_id: str) -> None:
 def send_light(host: str, port: int, train_id: str, brightness: int) -> None:
     cmd = LightCommand(brightness=brightness)
     _publish(host, port, cmd_topic(train_id, "light"), cmd.model_dump())
+
+
+@main.command("switch-controller")
+@click.option("--host", default=lambda: os.environ.get("CHOOCHOO_BROKER", "localhost"))
+@click.option("--port", default=lambda: mqtt_auth.default_port(), type=int)
+@_switch_opts
+def switch_controller_cmd(host: str, port: int, switch_id: str) -> None:
+    """Run the MQTT ↔ track-switch bridge."""
+    kind = os.environ.get("CHOOCHOO_SWITCH_KIND", "fake")
+    cfg = SwitchControllerConfig(
+        broker_host=host, broker_port=port, switch_id=switch_id, switch_kind=kind,
+    )
+    SwitchController(cfg).run()
+
+
+@main.group("switch-send")
+def switch_send() -> None:
+    """Publish a command to a switch controller."""
+
+
+@switch_send.command("throw")
+@click.option("--host", default=lambda: os.environ.get("CHOOCHOO_BROKER", "localhost"))
+@click.option("--port", default=lambda: mqtt_auth.default_port(), type=int)
+@_switch_opts
+@click.argument("direction", type=click.Choice([d.value for d in Direction]))
+def switch_send_throw(host: str, port: int, switch_id: str, direction: str) -> None:
+    cmd = ThrowCommand(direction=Direction(direction))
+    _publish(host, port, switch_cmd_topic(switch_id, "throw"), cmd.model_dump())
 
 
 def _publish(host: str, port: int, topic: str, payload: dict) -> None:

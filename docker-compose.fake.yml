@@ -62,6 +62,22 @@ services:
     profiles: [mqtt]
     restart: unless-stopped
 
+  switch-controller-mqtt:
+    image: choochoo:dev
+    build:
+      context: .
+    container_name: choochoo-switch-controller-mqtt
+    command: ["-v", "switch-controller"]
+    environment:
+      CHOOCHOO_BROKER: mosquitto
+      CHOOCHOO_BROKER_PORT: "1883"
+      CHOOCHOO_SWITCH_ID: sw1
+      CHOOCHOO_SWITCH_KIND: fake
+    depends_on:
+      - mosquitto
+    profiles: [mqtt]
+    restart: unless-stopped
+
   web-mqtt:
     image: choochoo:dev
     build:
