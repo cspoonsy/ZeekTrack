@@ -15,6 +15,9 @@ from choochoo.web import create_app
 def client():
     app = create_app()
     app.state.bridge._client = MagicMock()
+    # The switch bridge is always created; mock its client too so no broker
+    # is needed for train-only tests.
+    app.state.switch_bridge._client = MagicMock()
     with TestClient(app) as c:
         yield c, app.state.bridge
 

@@ -33,6 +33,12 @@ from choochoo.protocol import (
     cmd_topic,
     state_topic,
 )
+from choochoo.switch_protocol import (
+    SwitchState,
+    ThrowCommand,
+    switch_cmd_topic,
+    switch_state_topic,
+)
 
 log = logging.getLogger(__name__)
 
@@ -106,25 +112,98 @@ class MqttBridge:
         q.put_nowait(state)
 
 
+class SwitchBridge:
+    """MQTT bridge for the track switch. Structurally mirrors MqttBridge but
+    scoped to switch topics + SwitchState. Independent paho client so a
+    switch-broker glitch does not stall the train UI."""
+
+    def __init__(self, host: str, port: int, switch_id: str) -> None:
+        self.host = host
+        self.port = port
+        self.switch_id = switch_id
+        self.state: SwitchState | None = None
+        self._subscribers: set[asyncio.Queue[SwitchState]] = set()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._client = mqtt.Client(
+            mqtt.CallbackAPIVersion.VERSION2,
+            client_id=f"choochoo-web-switch-{switch_id}",
+        )
+        mqtt_auth.configure(self._client)
+        self._client.on_connect = self._on_connect
+        self._client.on_message = self._on_message
+
+    def start(self) -> None:
+        self._loop = asyncio.get_running_loop()
+        self._client.connect_async(self.host, self.port, keepalive=30)
+        self._client.loop_start()
+
+    def stop(self) -> None:
+        self._client.loop_stop()
+        self._client.disconnect()
+
+    def publish(self, action: str, payload: dict) -> None:
+        self._client.publish(switch_cmd_topic(self.switch_id, action), json.dumps(payload))
+
+    def subscribe(self) -> asyncio.Queue[SwitchState]:
+        q: asyncio.Queue[SwitchState] = asyncio.Queue(maxsize=16)
+        self._subscribers.add(q)
+        if self.state is not None:
+            q.put_nowait(self.state)
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue[SwitchState]) -> None:
+        self._subscribers.discard(q)
+
+    def _on_connect(self, client, _userdata, _flags, reason_code, _props) -> None:
+        topic = switch_state_topic(self.switch_id)
+        log.info("web switch mqtt connected rc=%s, subscribing to %s", reason_code, topic)
+        client.subscribe(topic)
+
+    def _on_message(self, _client, _userdata, msg: mqtt.MQTTMessage) -> None:
+        try:
+            state = SwitchState.model_validate_json(msg.payload)
+        except ValidationError as e:
+            log.warning("bad switch state payload: %s", e)
+            return
+        self.state = state
+        if self._loop is None:
+            return
+        for q in list(self._subscribers):
+            self._loop.call_soon_threadsafe(self._enqueue, q, state)
+
+    @staticmethod
+    def _enqueue(q: asyncio.Queue[SwitchState], state: SwitchState) -> None:
+        if q.full():
+            with suppress(asyncio.QueueEmpty):
+                q.get_nowait()
+        q.put_nowait(state)
+
+
 def create_app() -> FastAPI:
     protocol = os.environ.get("CHOOCHOO_PROTOCOL", "mqtt").lower()
     host = os.environ.get("CHOOCHOO_BROKER", "localhost")
     train_id = os.environ.get("CHOOCHOO_TRAIN_ID", "t1")
+    switch_id = os.environ.get("CHOOCHOO_SWITCH_ID", "sw1")
+    mqtt_port = int(os.environ.get("CHOOCHOO_BROKER_PORT", "1883"))
 
     if protocol == "modbus":
         from choochoo.modbus_bridge import ModbusBridge
-        port = int(os.environ.get("CHOOCHOO_MODBUS_PORT", "5020"))
-        bridge: MqttBridge | ModbusBridge = ModbusBridge(host, port, train_id)
+        modbus_port = int(os.environ.get("CHOOCHOO_MODBUS_PORT", "5020"))
+        bridge: MqttBridge | ModbusBridge = ModbusBridge(host, modbus_port, train_id)
     else:
-        port = int(os.environ.get("CHOOCHOO_BROKER_PORT", "1883"))
-        bridge = MqttBridge(host, port, train_id)
+        bridge = MqttBridge(host, mqtt_port, train_id)
+
+    # Switch is MQTT-only and always present regardless of the train protocol.
+    switch_bridge = SwitchBridge(host, mqtt_port, switch_id)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         bridge.start()
+        switch_bridge.start()
         try:
             yield
         finally:
+            switch_bridge.stop()
             bridge.stop()
 
     app = FastAPI(lifespan=lifespan, title="ChooChoo")
@@ -141,6 +220,8 @@ def create_app() -> FastAPI:
     )
     app.state.bridge = bridge
     app.state.train_id = train_id
+    app.state.switch_bridge = switch_bridge
+    app.state.switch_id = switch_id
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:
@@ -183,8 +264,37 @@ def create_app() -> FastAPI:
         finally:
             bridge.unsubscribe(q)
 
+    @app.get("/api/switch/state")
+    async def get_switch_state() -> dict:
+        return (
+            switch_bridge.state.model_dump()
+            if switch_bridge.state
+            else {"switch_id": switch_id}
+        )
+
+    @app.post("/api/switch/throw")
+    async def post_switch_throw(cmd: ThrowCommand) -> dict:
+        switch_bridge.publish("throw", cmd.model_dump())
+        return {"ok": True}
+
+    @app.websocket("/ws/switch/state")
+    async def ws_switch_state(ws: WebSocket) -> None:
+        await ws.accept()
+        q = switch_bridge.subscribe()
+        try:
+            while True:
+                state = await q.get()
+                await ws.send_text(state.model_dump_json())
+        except WebSocketDisconnect:
+            pass
+        finally:
+            switch_bridge.unsubscribe(q)
+
     # Referenced so lint doesn't flag these as unused endpoints.
-    _ = (post_motor, post_stop, post_light, get_state, ws_state, index)
+    _ = (
+        post_motor, post_stop, post_light, get_state, ws_state, index,
+        get_switch_state, post_switch_throw, ws_switch_state,
+    )
 
     return app
 
@@ -193,4 +303,4 @@ app = create_app()
 
 
 # Re-exported so tests can reach it without env vars.
-__all__ = ["app", "create_app", "MqttBridge", "Direction"]
+__all__ = ["app", "create_app", "MqttBridge", "SwitchBridge", "Direction"]
