@@ -1,6 +1,11 @@
 // Track-switch panel. Subscribes to /ws/switch/state, renders position +
 // connection + cooldown, and POSTs to /api/switch/throw on button clicks.
 //
+// Wrapped in an IIFE so its top-level `const $` and helpers don't collide
+// with app.js's identically-named globals — plain <script> tags share
+// one global scope.
+(() => {
+
 // Wire <-> visual direction mapping. The physical switch has three gears
 // between the motor and the rack, which inverts rotation direction.
 // Every planned switch in this range uses the same 3-gear mechanism, so
@@ -108,3 +113,5 @@ function connect() {
   ws.onerror = () => ws.close();
 }
 connect();
+
+})();

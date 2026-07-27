@@ -194,7 +194,11 @@ def create_app() -> FastAPI:
         bridge = MqttBridge(host, mqtt_port, train_id)
 
     # Switch is MQTT-only and always present regardless of the train protocol.
-    switch_bridge = SwitchBridge(host, mqtt_port, switch_id)
+    # It can point at a different broker than the train (relevant when the
+    # train is Modbus and CHOOCHOO_BROKER is the outstation host).
+    switch_host = os.environ.get("CHOOCHOO_SWITCH_BROKER", host)
+    switch_port = int(os.environ.get("CHOOCHOO_SWITCH_BROKER_PORT", mqtt_port))
+    switch_bridge = SwitchBridge(switch_host, switch_port, switch_id)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
