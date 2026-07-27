@@ -40,18 +40,23 @@ function labelForPosition(wirePosition) {
   return { label: "Unknown", cls: "switch-pill--unknown" };
 }
 
-function renderState(state) {
-  const { label, cls } = labelForPosition(state.position);
+function renderState(view) {
+  const { label, cls } = labelForPosition(view.position);
   positionPill.textContent = label;
   positionPill.className = `switch-pill ${cls}`;
 
+  // The connection pill reflects CONTROLLER liveness, not the payload's
+  // `connected` field (which is a BLE-link status the controller writes
+  // about itself — it stays stale in retention when the controller dies).
+  // `view.online` comes from the retained discovery topic, whose LWT
+  // flips to false when the controller drops.
   connPill.classList.remove("link-pill--up", "link-pill--down", "link-pill--unknown");
-  if (state.connected === true) {
+  if (view.online === true) {
     connPill.classList.add("link-pill--up");
     connText.textContent = "Switch · Connected";
-  } else if (state.connected === false) {
+  } else if (view.online === false) {
     connPill.classList.add("link-pill--down");
-    connText.textContent = "Switch · Disconnected";
+    connText.textContent = "Switch · Offline";
   } else {
     connPill.classList.add("link-pill--unknown");
     connText.textContent = "Switch · …";
@@ -59,7 +64,7 @@ function renderState(state) {
 
   // cooldown_until_ts is seconds-since-epoch from the controller. Store
   // it in ms for cheap comparison against Date.now().
-  latestCooldownUntilMs = (state.cooldown_until_ts || 0) * 1000;
+  latestCooldownUntilMs = (view.cooldown_until_ts || 0) * 1000;
 }
 
 // Cooldown ticker. Runs regardless of state pushes so the bar shrinks

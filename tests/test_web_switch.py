@@ -26,7 +26,9 @@ def test_switch_state_endpoint_without_cache_returns_bare(client):
     c, _ = client
     r = c.get("/api/switch/state")
     assert r.status_code == 200
-    assert r.json() == {"switch_id": "sw1"}
+    # Bare view before any state/discovery has arrived: just the id and
+    # a null `online` (unknown).
+    assert r.json() == {"switch_id": "sw1", "online": None}
 
 
 def test_switch_state_endpoint_returns_cached_state(client):
@@ -34,11 +36,27 @@ def test_switch_state_endpoint_returns_cached_state(client):
     bridge.state = SwitchState(
         switch_id="sw1", position="forward", connected=True
     )
+    bridge._online = True
     r = c.get("/api/switch/state")
     assert r.status_code == 200
     body = r.json()
     assert body["position"] == "forward"
-    assert body["connected"] is True
+    assert body["connected"] is True   # BLE-link claim from the controller
+    assert body["online"] is True      # controller-liveness from discovery LWT
+
+
+def test_switch_state_endpoint_reports_offline_after_lwt(client):
+    """After the discovery LWT fires, view() must report online=False even
+    if the retained state topic still has connected=True — that's the
+    exact bug the LWT subscription exists to catch."""
+    c, bridge = client
+    bridge.state = SwitchState(
+        switch_id="sw1", position="forward", connected=True
+    )
+    bridge._online = False
+    body = c.get("/api/switch/state").json()
+    assert body["connected"] is True   # stale, but preserved for debugging
+    assert body["online"] is False     # authoritative liveness signal
 
 
 def test_switch_throw_publishes(client):

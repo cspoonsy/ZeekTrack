@@ -34,9 +34,11 @@ from choochoo.protocol import (
     state_topic,
 )
 from choochoo.switch_protocol import (
+    SwitchDiscovery,
     SwitchState,
     ThrowCommand,
     switch_cmd_topic,
+    switch_discovery_topic,
     switch_state_topic,
 )
 
@@ -114,15 +116,24 @@ class MqttBridge:
 
 class SwitchBridge:
     """MQTT bridge for the track switch. Structurally mirrors MqttBridge but
-    scoped to switch topics + SwitchState. Independent paho client so a
-    switch-broker glitch does not stall the train UI."""
+    scoped to switch topics. Independent paho client so a switch-broker
+    glitch does not stall the train UI.
+
+    Subscribes to BOTH the retained `state` topic (controller-published
+    telemetry) AND the retained `discovery` topic (which the controller
+    marks online=true on connect and its LWT flips to online=false when
+    the controller drops). The websocket view combines the two so the UI
+    can reflect controller liveness — `SwitchState.connected` is a
+    payload field the controller writes about its own BLE link and stays
+    stale in retention when the controller dies uncleanly."""
 
     def __init__(self, host: str, port: int, switch_id: str) -> None:
         self.host = host
         self.port = port
         self.switch_id = switch_id
         self.state: SwitchState | None = None
-        self._subscribers: set[asyncio.Queue[SwitchState]] = set()
+        self._online: bool | None = None
+        self._subscribers: set[asyncio.Queue[dict]] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
         self._client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
@@ -144,39 +155,71 @@ class SwitchBridge:
     def publish(self, action: str, payload: dict) -> None:
         self._client.publish(switch_cmd_topic(self.switch_id, action), json.dumps(payload))
 
-    def subscribe(self) -> asyncio.Queue[SwitchState]:
-        q: asyncio.Queue[SwitchState] = asyncio.Queue(maxsize=16)
+    def view(self) -> dict:
+        """Combined view for REST/WebSocket consumers.
+
+        - `online`: True iff the controller's retained discovery beacon
+          says online=true. False after LWT fires (controller dead).
+          None until the first discovery message arrives.
+        - Remaining fields come from the latest `state` topic message.
+          Falls back to a bare `{"switch_id": ...}` if we haven't seen one."""
+        base: dict = (
+            self.state.model_dump()
+            if self.state is not None
+            else {"switch_id": self.switch_id}
+        )
+        base["online"] = self._online
+        return base
+
+    def subscribe(self) -> asyncio.Queue[dict]:
+        q: asyncio.Queue[dict] = asyncio.Queue(maxsize=16)
         self._subscribers.add(q)
-        if self.state is not None:
-            q.put_nowait(self.state)
+        if self.state is not None or self._online is not None:
+            q.put_nowait(self.view())
         return q
 
-    def unsubscribe(self, q: asyncio.Queue[SwitchState]) -> None:
+    def unsubscribe(self, q: asyncio.Queue[dict]) -> None:
         self._subscribers.discard(q)
 
     def _on_connect(self, client, _userdata, _flags, reason_code, _props) -> None:
-        topic = switch_state_topic(self.switch_id)
-        log.info("web switch mqtt connected rc=%s, subscribing to %s", reason_code, topic)
-        client.subscribe(topic)
+        state = switch_state_topic(self.switch_id)
+        discovery = switch_discovery_topic(self.switch_id)
+        log.info(
+            "web switch mqtt connected rc=%s, subscribing to %s and %s",
+            reason_code, state, discovery,
+        )
+        client.subscribe(state)
+        client.subscribe(discovery)
 
     def _on_message(self, _client, _userdata, msg: mqtt.MQTTMessage) -> None:
-        try:
-            state = SwitchState.model_validate_json(msg.payload)
-        except ValidationError as e:
-            log.warning("bad switch state payload: %s", e)
+        state_topic = switch_state_topic(self.switch_id)
+        discovery_topic = switch_discovery_topic(self.switch_id)
+        if msg.topic == state_topic:
+            try:
+                self.state = SwitchState.model_validate_json(msg.payload)
+            except ValidationError as e:
+                log.warning("bad switch state payload: %s", e)
+                return
+        elif msg.topic == discovery_topic:
+            try:
+                self._online = SwitchDiscovery.model_validate_json(msg.payload).online
+            except ValidationError as e:
+                log.warning("bad switch discovery payload: %s", e)
+                return
+        else:
             return
-        self.state = state
         if self._loop is None:
             return
+        view = self.view()
         for q in list(self._subscribers):
-            self._loop.call_soon_threadsafe(self._enqueue, q, state)
+            self._loop.call_soon_threadsafe(self._enqueue, q, view)
 
     @staticmethod
-    def _enqueue(q: asyncio.Queue[SwitchState], state: SwitchState) -> None:
+    def _enqueue(q: asyncio.Queue[dict], view: dict) -> None:
         if q.full():
             with suppress(asyncio.QueueEmpty):
                 q.get_nowait()
-        q.put_nowait(state)
+        q.put_nowait(view)
 
 
 def create_app() -> FastAPI:
@@ -270,11 +313,7 @@ def create_app() -> FastAPI:
 
     @app.get("/api/switch/state")
     async def get_switch_state() -> dict:
-        return (
-            switch_bridge.state.model_dump()
-            if switch_bridge.state
-            else {"switch_id": switch_id}
-        )
+        return switch_bridge.view()
 
     @app.post("/api/switch/throw")
     async def post_switch_throw(cmd: ThrowCommand) -> dict:
@@ -287,8 +326,8 @@ def create_app() -> FastAPI:
         q = switch_bridge.subscribe()
         try:
             while True:
-                state = await q.get()
-                await ws.send_text(state.model_dump_json())
+                view = await q.get()
+                await ws.send_json(view)
         except WebSocketDisconnect:
             pass
         finally:
