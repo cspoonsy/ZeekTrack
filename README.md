@@ -78,7 +78,14 @@ git clone <repo-url> choochoo && cd choochoo
 │   ├── Dockerfile                   # zeek/zeek:latest + our site policy
 │   └── local.zeek                   # loads MQTT + Modbus analyzers, JSON output
 ├── vector/                          # Zeek → Gravwell shipper (sensor profile)
-│   └── vector.yaml                  # tails zeek-logs volume, TCP sink to gravwell:7777
+│   └── vector.yaml                  # tails zeek-logs volume, TCP sink to Gravwell
+├── gravwell/                        # Custom Gravwell image (gravwell profile)
+│   ├── Dockerfile                   # extends gravwell/gravwell:latest, bakes in dashboards
+│   ├── config/simple_relay.conf     # simple_relay ingester config (port 7777 → tag zeek)
+│   └── dashboards/                  # five pre-built Gravwell dashboards (JSON)
+├── admin/                           # Operator panel (admin profile)
+│   ├── Dockerfile
+│   └── app.py + templates/          # Flask app at :9999, Corelight-branded UI
 ├── mosquitto/
 │   ├── config/                      # baseline broker config (anonymous)
 │   ├── config-hardened/             # TLS + auth + ACL config
@@ -114,10 +121,12 @@ the network.
 
 ### What the host binds
 
-| Purpose                       | Host URL / endpoint             | Container         | Container port | Profile     |
-|-------------------------------|---------------------------------|-------------------|----------------|-------------|
-| Web UI (both control planes)  | `http://localhost:8000`         | `choochoo-web-*`  | 8000/tcp       | `mqtt` / `modbus` |
-| Gravwell UI                   | `http://localhost:8080`         | `choochoo-gravwell` | 80/tcp       | `gravwell`  |
+| Purpose                       | Host URL / endpoint             | Container           | Container port | Profile     |
+|-------------------------------|---------------------------------|---------------------|----------------|-------------|
+| Web UI (MQTT / dual mode)     | `http://localhost:8000`         | `choochoo-web-mqtt` | 8000/tcp       | `mqtt` / `dual` |
+| Web UI (Modbus / dual mode)   | `http://localhost:8001`         | `choochoo-web-modbus` | 8000/tcp     | `modbus` / `dual` |
+| Gravwell UI                   | `http://localhost:8080`         | `choochoo-gravwell` | 80/tcp         | `gravwell`  |
+| Operator admin panel          | `http://localhost:9999`         | `choochoo-admin`    | 9999/tcp       | `admin`     |
 
 Nothing else on the host is published. The Mosquitto broker, Modbus
 outstation, Kali attacker, Zeek sensor, Vector shipper, and internal
@@ -307,6 +316,21 @@ a real searchable UI instead of `tail -f`.
    creds `admin` / `changeme` — **change the admin password immediately**
    at Profile → Change Password.
 
+**Pre-built dashboards** are included in `gravwell/dashboards/` and
+provisioned automatically by `scripts/lab-up.sh` each time the lab
+starts. Five dashboards ship out of the box:
+
+| Dashboard | Window | Purpose |
+|---|---|---|
+| Live Ops | 15 min | Real-time train command stream and traffic volume |
+| Live Feed (Spoiler-Free) | 15 min | Attendee-facing view — no detections shown |
+| SOC Overview | 15 min | Alert timeline and top-talker summary |
+| Command Forensics | 1 hr | Modbus write history, switch throws, unauthorized-write detect |
+| Analyst Intel | 1 hr | Host inventory, recon probe history, connection graph |
+
+`lab-up.sh` upserts dashboards on every run (delete-by-name + POST), so
+re-running it always matches what's in `gravwell/dashboards/`.
+
 Both the license and the admin password persist in the
 `choochoo_gravwell-storage` Docker volume, so subsequent `up -d` runs
 skip the wizard. Nothing license-related lives in the repo tree — the
@@ -336,6 +360,39 @@ tag=zeek json "_path"=="mqtt_publish" "id.orig_h" topic payload
 # MQTT CONNECT events — spot rogue clients, empty client IDs:
 tag=zeek json "_path"=="mqtt_connect" "id.orig_h" client_id connect_status
     | table _write_ts id.orig_h client_id connect_status
+```
+
+### Admin panel (operator controls)
+
+Stack the `admin` profile to run a password-protected operator panel at
+`http://localhost:9999`. It's intended for the event operator, not trainees
+— keep it off the projector.
+
+```sh
+docker compose -f docker-compose.fake.yml \
+  --profile mqtt --profile sensor --profile admin up -d
+# http://localhost:9999   (admin / choochoo-admin by default)
+```
+
+**What it provides:**
+
+- **Per-container status** — live CPU / RAM / disk / network stats, auto-polled every 5 s.
+- **Restart / rebuild** individual containers without touching the rest of the stack.
+- **IP blocking** — one-click `iptables DOCKER-USER` drop rule for a source IP (useful when an attendee is disrupting the demo).
+- **Full stack teardown + rebuild** — brings everything down and back up in one action.
+
+**Security:** The panel requires HTTP Basic Auth and runs on a non-guessable port.
+It has full Docker socket + `iptables` access — treat it like root. Change
+`ADMIN_PASSWORD` before running at a public event:
+
+```sh
+ADMIN_PASSWORD=your-secret docker compose -f docker-compose.fake.yml \
+  --profile mqtt --profile admin up -d
+```
+
+Or set it in a `.env` file at the repo root:
+```
+ADMIN_PASSWORD=your-secret
 ```
 
 ### Adding a Kali attacker box (virtual events)

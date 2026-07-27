@@ -14,13 +14,6 @@ FROM zeek/zeek:latest
 
 COPY local.zeek /usr/local/zeek/share/zeek/site/local.zeek
 
-# OT detection packages (Corelight internal — loaded directly, no zkg required).
-# cluster_relay_lib provides cluster plumbing used by both suites;
-# in standalone mode it is a no-op.
-COPY cluster_relay_lib  /usr/local/zeek/share/zeek/site/cluster_relay_lib
-COPY modbus-detections  /usr/local/zeek/share/zeek/site/modbus-detections
-COPY mqtt-detections    /usr/local/zeek/share/zeek/site/mqtt-detections
-
 # WORKDIR creates /logs if absent — no RUN step needed (avoids AppArmor
 # issues inside unprivileged LXC).
 WORKDIR /logs

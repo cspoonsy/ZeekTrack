@@ -13,11 +13,6 @@
 # in the lab). Tell Zeek's DPD to parse this port as Modbus TCP.
 redef Modbus::ports += { 5020/tcp };
 
-# OT security detections — loaded after the base analyzers so notice types
-# and SumStats reducers are registered before any packets are processed.
-@load ./mqtt-detections
-@load ./modbus-detections
-
 # Emit JSON instead of TSV — one JSON document per line per log stream,
 # which is exactly the format Gravwell's simple_relay `line` reader wants.
 redef LogAscii::use_json = T;
