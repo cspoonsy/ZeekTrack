@@ -21,6 +21,15 @@ from choochoo.protocol import Direction
 
 SWITCH_TOPIC_ROOT = "choochoo/switch"
 
+# --- Wire ↔ physical mapping ------------------------------------------------
+# The switch mechanism has 3 gears between the motor and the rack, so motor
+# rotation direction is inverted at the rack. Every planned switch in this
+# range uses the same mechanism, so these constants are a fixed system
+# invariant. `switch.js` keeps its own JS-side copy of the same mapping;
+# both must stay in sync — Python is the authoritative source.
+UI_STRAIGHT_WIRE_DIRECTION = Direction.FORWARD
+UI_CURVE_WIRE_DIRECTION = Direction.REVERSE
+
 # --- Safety envelope --------------------------------------------------------
 # Hard-coded. Tuned against the real sw1 Circuit Cube with a 3-gear train
 # driving a 4-stud rack — 60 didn't move it, 110 nudged it, 130 clears

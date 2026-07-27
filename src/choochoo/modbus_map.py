@@ -13,7 +13,9 @@ Address space (all unit id 1):
         2   command counter (operator increments to issue an "edge")
 
     Coils (FC 01/05) — operator writes:
-        0   emergency stop (write True to trip; outstation clears)
+        0   emergency stop         (edge-triggered; outstation clears)
+        1   switch: throw straight (edge-triggered; outstation clears)
+        2   switch: throw curve    (edge-triggered; outstation clears)
 
     Input regs (FC 04) — read-only telemetry:
         0   current commanded power 0..100
@@ -22,6 +24,9 @@ Address space (all unit id 1):
     Discrete inputs (FC 02) — read-only telemetry:
         0   train connected
         1   direction (0 = reverse, 1 = forward)
+        2   switch position = straight  (0 if unknown / mid-throw)
+        3   switch position = curve     (0 if unknown / mid-throw)
+        4   switch controller online    (LWT-driven; 0 if never seen)
 """
 
 from __future__ import annotations
@@ -38,7 +43,9 @@ HR_COUNT = 3
 
 # Coil addresses
 CO_ESTOP = 0
-CO_COUNT = 1
+CO_SWITCH_TO_STRAIGHT = 1
+CO_SWITCH_TO_CURVE = 2
+CO_COUNT = 3
 
 # Input-register addresses
 IR_CURRENT_POWER = 0
@@ -48,7 +55,10 @@ IR_COUNT = 2
 # Discrete-input addresses
 DI_CONNECTED = 0
 DI_DIRECTION = 1
-DI_COUNT = 2
+DI_SWITCH_POSITION_STRAIGHT = 2
+DI_SWITCH_POSITION_CURVE = 3
+DI_SWITCH_ONLINE = 4
+DI_COUNT = 5
 
 
 def encode_signed_power(value: int) -> int:

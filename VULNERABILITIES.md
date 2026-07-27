@@ -20,6 +20,12 @@
 
 # Part 1 — IoT mode (MQTT)
 
+> **Event note.** The ChooChoo training event runs Modbus for the train
+> and MQTT for the track switch (see Part 3 — S1). The V-series
+> vulnerabilities below still apply to anyone running the legacy MQTT
+> train controller, but the event's live MQTT surface is the switch
+> broker, not the train broker.
+
 ## Network exposure
 
 | Surface           | Exposure                                                         |
@@ -398,6 +404,64 @@ Modbus, they can POST to `/api/motor` and the web bridge translates it
 into a Modbus write on their behalf. **Switching to enterprise mode
 does not, by itself, fix the browser-side problem.**
 
+## M10 — Anonymous switch throws via Modbus coil write
+
+The outstation also mediates the track switch (see the point map — Coil 1
+is `throw to straight`, Coil 2 is `throw to curve`). Both coils are
+edge-triggered: writing True fires an MQTT `ThrowCommand` at the switch
+broker and the outstation latches the coil back to False. No auth, no rate
+limit at the Modbus layer — same posture as the E-stop coil.
+
+**Attacker action**
+
+```sh
+# read the switch DIs (position + online flag) to observe current state
+mbpoll -m tcp -a 1 -t 0 -r 3 -c 3 <host>
+
+# throw to straight (coil address 1, 1-based on mbpoll wire, so `-r 2`)
+mbpoll -m tcp -a 1 -t 0 -r 2 -c 1 <host> 1
+
+# throw to curve (coil address 2, mbpoll `-r 3`)
+mbpoll -m tcp -a 1 -t 0 -r 3 -c 1 <host> 1
+```
+
+**Mitigation delta**
+
+The `SwitchController`'s client-side cooldown (`SWITCH_COOLDOWN_S`) still
+fires — an attacker cannot burn the switch motor by spamming coil writes.
+But they can time a throw for the exact moment the train is entering the
+switch, which is the more interesting attack. **Safety mitigation, not a
+security mitigation.**
+
+The Modbus wire gives the attacker no feedback on whether the throw was
+cooldown-rejected: the coil latches back to False regardless. To confirm
+they need to poll the position DIs (2 and 3) or sniff the switch's MQTT
+`event` topic on the same broker.
+
+**What Zeek sees**
+
+`modbus.log` records the Write-Single-Coil / Write-Multiple-Coils PDU with
+target address 1 or 2 and value 1. A rapid alternation between coils 1
+and 2 is a distinctive signature — the outstation's own operator has no
+reason to flip both in quick succession.
+
+**Detection hook**
+
+Count `func=WRITE_SINGLE_COIL OR WRITE_MULTIPLE_COILS` messages targeting
+`addr in {1, 2}` per source over a rolling window. Anything faster than
+one per 2 s cannot be legitimate operator input (that's the cooldown
+floor). Complementary to the S1 MQTT detection — the same throw fires
+both signals if the trainee is watching both surfaces.
+
+**What Zeek does not see**
+
+The MQTT-side `ThrowCommand` the outstation publishes as a downstream
+side effect only reaches the switch controller — the outstation is the
+MQTT publisher, and any Zeek sensor listening on the broker will see
+`id.orig_h` as the outstation, not the attacker. Correlation across
+protocols requires joining `modbus.log` (coil write from attacker) with
+`mqtt_publish.log` (throw from outstation) on timestamp.
+
 ## Suggested attacker progression (Modbus mode)
 
 **Stage 1 — Recon (Zeek visibility: connection on 5020/tcp)**
@@ -454,6 +518,12 @@ does not, by itself, fix the browser-side problem.**
   could be added as a future stage to parallel the MQTT hardening.
 
 # Part 3 — Track-switch surface (MQTT)
+
+> **Event note.** During the ChooChoo training event the switch broker is
+> the only live MQTT surface. Trainees who reach the LAN and probe
+> `1883/tcp` will find the switch topics under `choochoo/switch/+/#`.
+> The train's MQTT topics (`choochoo/train/+/#`) may also be visible if
+> the legacy controller is running, but the event does not exercise them.
 
 ## S1 — Anonymous throw commands drive real hardware
 
