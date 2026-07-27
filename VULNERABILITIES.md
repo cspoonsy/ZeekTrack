@@ -11,12 +11,21 @@
 > auditor; many of them ship as the *default* behavior of off-the-shelf
 > brokers, gateways, and PLCs.
 >
-> The system runs in one of two modes; the catalog is split accordingly:
+> The catalog is split into three parts, one per attack surface. Under
+> the ChooChoo event configuration, Parts 2 and 3 are both live (Modbus
+> train + MQTT switch, plus an M10 bridge that lets a Modbus master
+> reach the switch); Part 1 covers the legacy MQTT train, retained as
+> a reference surface.
 >
-> - **Part 1 — IoT mode (MQTT).** Mosquitto broker, retained discovery,
->   topic-based pub/sub.
-> - **Part 2 — Enterprise mode (Modbus/TCP).** Point-to-point industrial
->   protocol; no broker, no auth, register-level commands.
+> - **Part 1 — IoT mode (MQTT), train.** Mosquitto broker, retained
+>   discovery, topic-based pub/sub. Deprecated for the event but still
+>   demonstrable if the operator brings up `--profile legacy-web`.
+> - **Part 2 — Enterprise mode (Modbus/TCP), train + switch bridge.**
+>   Point-to-point industrial protocol; no broker, no auth, register-level
+>   commands. The outstation also mediates the track switch (M10).
+> - **Part 3 — Track-switch surface (MQTT).** Same broker as Part 1;
+>   dedicated topics under `choochoo/switch/+/#`. S1 (anonymous throw),
+>   S2 (retained-topic recon), S3 (spoof retained state / LWT semantics).
 
 # Part 1 — IoT mode (MQTT)
 
@@ -525,6 +534,13 @@ protocols requires joining `modbus.log` (coil write from attacker) with
 > The train's MQTT topics (`choochoo/train/+/#`) may also be visible if
 > the legacy controller is running, but the event does not exercise them.
 
+## Network exposure
+
+The switch adds no new listening port — everything rides on the same
+Mosquitto broker at `1883/tcp` as the legacy MQTT train (see V1). Every
+attacker who has already reached the broker is one `mosquitto_pub` away
+from throwing the switch.
+
 ## S1 — Anonymous throw commands drive real hardware
 
 Baseline: same anonymous plaintext MQTT broker as V1. Anyone on the LAN
@@ -534,8 +550,16 @@ track under the train.
 **Attacker action**
 
 ```sh
+# One-off throw.
 mosquitto_pub -h <broker> -t choochoo/switch/sw1/cmd/throw \
   -m '{"action":"throw","direction":"forward"}'
+
+# Whether it succeeded: subscribe to the outcome event alongside.
+mosquitto_sub -h <broker> -t 'choochoo/switch/sw1/event' -v &
+mosquitto_pub -h <broker> -t choochoo/switch/sw1/cmd/throw \
+  -m '{"action":"throw","direction":"reverse"}'
+# → {"switch_id":"sw1","direction":"reverse","outcome":"ok",...}
+# or → {"switch_id":"sw1","direction":"reverse","outcome":"cooldown_rejected",...}
 ```
 
 **Mitigation delta vs V1**
@@ -544,6 +568,9 @@ The switch controller's client-side cooldown (`SWITCH_COOLDOWN_S`) and
 bounded burst (`SWITCH_BURST_MS`) mean an attacker cannot burn the motor
 out by spamming throws — but they can still divert the train at chosen
 moments. This is a *safety* mitigation, not a security mitigation.
+
+The cooldown-rejected event tells the attacker if the broker even got
+their throw; there is no other feedback signal.
 
 **What Zeek sees**
 
@@ -559,4 +586,78 @@ legitimate operator input.
 ```zeek
 # Count PUBLISH events per source over a 10-second rolling window.
 # Alert on any source exceeding one throw per 2 s.
+```
+
+**Cross-protocol note.** Under the event configuration the SAME throw
+can arrive via the Modbus outstation (M10). When the outstation publishes
+`cmd/throw` on the attacker's behalf, `mqtt_publish.log`'s `id.orig_h`
+is the outstation container — NOT the attacker. Correlating the two
+requires joining `modbus.log` (coil write) with `mqtt_publish.log` (throw)
+on timestamp. See M10 for the Modbus-side detection.
+
+## S2 — Retained state and discovery topics leak the schema
+
+Both `choochoo/switch/<id>/state` and `.../discovery` are published
+`retain=true`. The moment a subscriber joins, the broker replays the last
+value — an attacker learns:
+
+- Switch IDs in use (all of them, via wildcard subscribe to
+  `choochoo/switch/+/state`).
+- Current position (attack timing).
+- Cooldown window remaining (`cooldown_until_ts` in `state`).
+- The safety envelope (`max_burst_ms`, `cooldown_s` in `discovery`).
+- Whether the controller is alive (`online` in `discovery`).
+
+**Attacker action**
+
+```sh
+# Enumerate every switch on the bus in one command, with retained values.
+mosquitto_sub -h <broker> -t 'choochoo/switch/+/#' -v -R
+```
+
+**What Zeek sees**
+
+MQTT SUBSCRIBE from a new source with a wildcard on `choochoo/switch/+`.
+Legitimate consumers subscribe to one specific switch ID; anyone doing
+enumeration hits the wildcard. In `mqtt_subscribe.log`, `topics` will
+contain the `+` character — trivial signature.
+
+## S3 — Discovery beacon's LWT is trustworthy — but only for ungraceful disconnects
+
+The switch controller registers a Last Will & Testament that flips
+`discovery.online` to `false` when the controller drops. Both the web UI
+pill and the Modbus `DI_SWITCH_ONLINE` DI read this flag as the
+authoritative controller-liveness signal.
+
+**But**: the payload field `state.connected` (which describes the
+controller's BLE link, not its own liveness) stays retained with the last
+value the controller ever published. A dead controller with a running
+BLE session at time of death leaves `state.connected = true` in retention
+forever. An HMI that reads `state.connected` for liveness will show a
+green pill against a corpse. Both the web UI and the Modbus outstation
+were reworked to read `discovery.online` for exactly this reason.
+
+**Attacker action** — spoof the state topic. As long as the retained
+value stays plausible, downstream consumers that read the wrong field
+believe it:
+
+```sh
+# With the real controller stopped, replace the retained state so
+# consumers see a bogus position + connected=true.
+mosquitto_pub -h <broker> -r -t choochoo/switch/sw1/state \
+  -m '{"switch_id":"sw1","position":"forward","connected":true,"last_throw_ts":0,"cooldown_until_ts":0}'
+```
+
+**What Zeek sees**
+
+MQTT PUBLISH with `retain=1` from an unexpected source. In
+`mqtt_publish.log`, the retain flag is preserved; alerting on
+`retain=T` + topic matching `choochoo/switch/+/state` from any source
+that is not the switch controller container is a strong signal.
+
+**Detection hook**
+
+```zeek
+# Alert on any retained publish to a switch state/discovery topic
+# from a client that is not the known switch controller.
 ```
