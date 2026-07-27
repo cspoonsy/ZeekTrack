@@ -111,6 +111,12 @@ services:
       CHOOCHOO_PROTOCOL: modbus
       CHOOCHOO_TRAIN: fake
       CHOOCHOO_TRAIN_ID: t1
+      # Outstation also mediates the track switch (M10). Points its
+      # MQTT client at the switch broker; only takes effect when
+      # --profile mqtt is also active.
+      CHOOCHOO_SWITCH_BROKER: mosquitto
+      CHOOCHOO_SWITCH_BROKER_PORT: "1883"
+      CHOOCHOO_SWITCH_ID: sw1
     expose:
       - "5020"
     profiles: [modbus]
