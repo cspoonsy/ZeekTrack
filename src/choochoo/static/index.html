@@ -11,7 +11,14 @@
 </head>
 <body>
 <main>
-  <h1>ChooChoo <span id="mode-pill" class="pill"></span></h1>
+  <h1>
+    ChooChoo
+    <span id="mode-pill" class="pill"></span>
+    <span id="link-pill" class="pill link-pill link-pill--unknown">
+      <span class="link-dot"></span>
+      <span id="link-pill-text">BLE • …</span>
+    </span>
+  </h1>
   <section class="state">
     <div>Train: <code id="train-id">?</code></div>
     <div>Connected: <code id="connected">?</code></div>
@@ -30,6 +37,7 @@
       <line id="link-browser-broker"     x1="60"  y1="45" x2="160" y2="45" stroke="#30363d" stroke-width="2" />
       <line id="link-broker-controller"  x1="200" y1="45" x2="300" y2="45" stroke="#30363d" stroke-width="2" />
       <line id="link-controller-train"   x1="340" y1="45" x2="440" y2="45" stroke="#30363d" stroke-width="2" stroke-dasharray="5 4" />
+      <text id="label-link3" x="390" y="65" text-anchor="middle" fill="#8b949e" font-size="7"></text>
 
       <!-- Connection labels. JS swaps text to match the active protocol. -->
       <text id="label-link1" x="110" y="38" text-anchor="middle" fill="#8b949e" font-size="8"></text>
@@ -51,7 +59,7 @@
         <text x="320" y="56" text-anchor="middle" fill="#8b949e" font-size="7">(Pi)</text>
       </g>
       <g id="node-train" data-x="450" data-y="45">
-        <rect x="440" y="30" width="20" height="30" rx="4" fill="#f0883e" stroke="#0b0c0e" />
+        <rect id="node-train-rect" x="440" y="30" width="20" height="30" rx="4" fill="#f0883e" stroke="#0b0c0e" />
       </g>
 
       <!-- Live packets land in this group. -->
@@ -141,11 +149,35 @@
     </label>
   </section>
 
+  <section class="switch">
+    <h2>Track switch
+      <span id="switch-conn-pill" class="pill link-pill link-pill--unknown">
+        <span class="link-dot"></span>
+        <span id="switch-conn-text">Switch &middot; &hellip;</span>
+      </span>
+    </h2>
+    <div class="switch-status">
+      <span>Position:</span>
+      <span id="switch-position-pill" class="switch-pill switch-pill--unknown">Unknown</span>
+      <span class="switch-cooldown-wrap">
+        <span>Cooldown:</span>
+        <progress id="switch-cooldown-bar" value="0" max="2000"></progress>
+        <span id="switch-cooldown-remaining">ready</span>
+      </span>
+    </div>
+    <div class="buttons switch-buttons">
+      <button id="btn-throw-straight" class="dir">Throw to Straight</button>
+      <button id="btn-throw-curve"    class="dir">Throw to Curve</button>
+    </div>
+    <div id="switch-last-event" class="switch-last-event"></div>
+  </section>
+
   <details>
     <summary>Debug</summary>
     <pre id="log"></pre>
   </details>
 </main>
 <script src="/static/app.js"></script>
+<script src="/static/switch.js"></script>
 </body>
 </html>

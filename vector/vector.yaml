@@ -17,7 +17,9 @@ sources:
     type: file
     include:
       - /zeek-logs/*.log
-      - /zeek-modbus-logs/*.log   # populated only under the dual profile
+    # Zeek writes stdout/stderr redirects and reporter/broker chatter here
+    # too. Skip the ones that aren't per-event JSON so Gravwell only sees
+    # meaningful protocol logs.
     exclude:
       - /zeek-logs/stdout.log
       - /zeek-logs/stderr.log
@@ -26,17 +28,11 @@ sources:
       - /zeek-logs/loaded_scripts.log
       - /zeek-logs/packet_filter.log
       - /zeek-logs/stats.log
-      - /zeek-modbus-logs/stdout.log
-      - /zeek-modbus-logs/stderr.log
-      - /zeek-modbus-logs/reporter.log
-      - /zeek-modbus-logs/broker.log
-      - /zeek-modbus-logs/loaded_scripts.log
-      - /zeek-modbus-logs/packet_filter.log
-      - /zeek-modbus-logs/stats.log
     read_from: beginning
-    # Poll every second so vector sees appends on Docker volume mounts.
-    # Without this, vector treats EOF as "done" instead of continuing to tail.
-    glob_minimum_cooldown_ms: 1000
+    # Fingerprint by content, not device+inode. Docker volume mounts can
+    # reuse inodes across rotation and cause Vector to skip a fresh file.
+    # Zeek's first line of every log is a unique header ({"_path":"conn",...}),
+    # so hashing one line is enough to disambiguate every stream.
     fingerprint:
       strategy: checksum
       lines: 1
@@ -48,7 +44,7 @@ sinks:
     mode: tcp
     # Ship to Gravwell's simple_relay ingester container, which forwards
     # to the indexer over :4023 using the shared Ingest-Secret.
-    address: simple-relay:7777
+    address: 192.168.1.201:7777
     encoding:
       codec: text
     framing:

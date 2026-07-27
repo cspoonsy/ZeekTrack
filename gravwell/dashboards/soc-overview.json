@@ -19,7 +19,7 @@
       },
       {
         "alias": "unique_ips",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | unique \"id.orig_h\" | count | numbercard count",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | unique \"id.orig_h\" | count | numbercard count",
         "color": null
       },
       {
@@ -29,32 +29,32 @@
       },
       {
         "alias": "conns_over_time",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
         "color": null
       },
       {
         "alias": "top_talkers",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
         "color": null
       },
       {
         "alias": "mqtt_activity",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_connect\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_connect\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
         "color": null
       },
       {
         "alias": "modbus_activity",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
         "color": null
       },
       {
         "alias": "mqtt_subs",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_subscribe\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" topics | table \"id.orig_h\" topics",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_subscribe\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" topics | table \"id.orig_h\" topics",
         "color": null
       },
       {
         "alias": "http_requests",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"http\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" method uri user_agent | table \"id.orig_h\" method uri user_agent",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"http\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" method uri user_agent | table \"id.orig_h\" method uri user_agent",
         "color": null
       },
       {
@@ -74,17 +74,17 @@
       },
       {
         "alias": "byte_asymmetry",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" orig_bytes resp_bytes | sum orig_bytes by \"id.orig_h\" | table \"id.orig_h\" sum",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" orig_bytes resp_bytes | sum orig_bytes by \"id.orig_h\" | table \"id.orig_h\" sum",
         "color": null
       },
       {
         "alias": "anon_mqtt_clients",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_connect\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" client_id | count by \"id.orig_h\" | table \"id.orig_h\" count",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_connect\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" client_id | count by \"id.orig_h\" | table \"id.orig_h\" count",
         "color": null
       },
       {
         "alias": "conn_state_pie",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json conn_state | count by conn_state over 1h | chart count by conn_state",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json conn_state | count by conn_state over 1h | chart count by conn_state",
         "color": null
       },
       {
@@ -94,22 +94,42 @@
       },
       {
         "alias": "dest_port_bar",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.resp_p\" | count by \"id.resp_p\" over 1h | chart count by \"id.resp_p\"",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"conn\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.resp_p\" | count by \"id.resp_p\" over 1h | chart count by \"id.resp_p\"",
         "color": null
       },
       {
         "alias": "mqtt_topic_pie",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | json topic | count by topic over 1h | chart count by topic",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json topic | count by topic over 1h | chart count by topic",
         "color": null
       },
       {
         "alias": "modbus_func_pie",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json func | count by func over 1h | chart count by func",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json func | count by func over 1h | chart count by func",
         "color": null
       },
       {
         "alias": "http_method_pie",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"http\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json method | count by method over 1h | chart count by method",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"http\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json method | count by method over 1h | chart count by method",
+        "color": null
+      },
+      {
+        "alias": "ot_alerts_soc",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"notice\\\"\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "ot_notice_rate_soc",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"notice\\\"\" | json note | count by note over 5m | chart count by note",
+        "color": null
+      },
+      {
+        "alias": "ot_notice_type_breakdown",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"notice\\\"\" | json note | stats count by note | sort by count desc | table note count",
+        "color": null
+      },
+      {
+        "alias": "switch_notices",
+        "query": "tag=zeek grep \"SwitchThrow\" | json note msg src | table note msg src",
         "color": null
       }
     ],
@@ -145,7 +165,7 @@
       {
         "id": 3,
         "title": "Protocol Mix",
-        "renderer": "categoryBarChart",
+        "renderer": "chart",
         "hideZoom": true,
         "span": {
           "col": 6,
@@ -155,7 +175,21 @@
         },
         "searchesIndex": 2,
         "rendererOptions": {
-          "chartType": "pie"
+          "chartType": "bar",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
@@ -179,7 +213,21 @@
           "YAxisSplitLine": "no",
           "IncludeOther": "yes",
           "ConnectNulls": "yes",
-          "LogScale": "no"
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
@@ -195,7 +243,21 @@
         },
         "searchesIndex": 4,
         "rendererOptions": {
-          "chartType": "bar"
+          "chartType": "bar",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
@@ -219,7 +281,21 @@
           "YAxisSplitLine": "no",
           "IncludeOther": "yes",
           "ConnectNulls": "yes",
-          "LogScale": "no"
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
@@ -243,7 +319,21 @@
           "YAxisSplitLine": "no",
           "IncludeOther": "yes",
           "ConnectNulls": "yes",
-          "LogScale": "no"
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
@@ -347,7 +437,7 @@
       {
         "id": 15,
         "title": "Connection Outcomes \u2014 Distribution",
-        "renderer": "categoryBarChart",
+        "renderer": "chart",
         "hideZoom": true,
         "span": {
           "col": 4,
@@ -357,13 +447,27 @@
         },
         "searchesIndex": 14,
         "rendererOptions": {
-          "chartType": "pie"
+          "chartType": "bar",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
         "id": 16,
         "title": "Log Type Distribution",
-        "renderer": "pieChart",
+        "renderer": "chart",
         "hideZoom": true,
         "span": {
           "col": 4,
@@ -373,13 +477,27 @@
         },
         "searchesIndex": 15,
         "rendererOptions": {
-          "chartType": "pie"
+          "chartType": "pie",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
         "id": 17,
         "title": "Destination Ports \u2014 Activity",
-        "renderer": "donutChart",
+        "renderer": "chart",
         "hideZoom": true,
         "span": {
           "col": 4,
@@ -389,13 +507,27 @@
         },
         "searchesIndex": 16,
         "rendererOptions": {
-          "chartType": "bar"
+          "chartType": "pie",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
         "id": 18,
         "title": "MQTT Topic Distribution",
-        "renderer": "categoryBarChart",
+        "renderer": "chart",
         "hideZoom": true,
         "span": {
           "col": 4,
@@ -405,13 +537,27 @@
         },
         "searchesIndex": 17,
         "rendererOptions": {
-          "chartType": "pie"
+          "chartType": "bar",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
         "id": 19,
         "title": "Modbus Function Breakdown",
-        "renderer": "categoryBarChart",
+        "renderer": "chart",
         "hideZoom": true,
         "span": {
           "col": 4,
@@ -421,13 +567,27 @@
         },
         "searchesIndex": 18,
         "rendererOptions": {
-          "chartType": "pie"
+          "chartType": "bar",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
         "id": 20,
         "title": "HTTP Methods Distribution",
-        "renderer": "donutChart",
+        "renderer": "chart",
         "hideZoom": true,
         "span": {
           "col": 4,
@@ -437,8 +597,93 @@
         },
         "searchesIndex": 19,
         "rendererOptions": {
-          "chartType": "pie"
+          "chartType": "pie",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
+      },
+      {
+        "id": 21,
+        "title": "Security Alerts \u2014 total OT/ICS notices",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "x": 0,
+          "y": 36,
+          "col": 3,
+          "row": 6
+        },
+        "searchesIndex": 20,
+        "rendererOptions": {}
+      },
+      {
+        "id": 22,
+        "title": "Alert Rate by Detection Type",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": {
+          "x": 3,
+          "y": 36,
+          "col": 6,
+          "row": 6
+        },
+        "searchesIndex": 21,
+        "rendererOptions": {
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 23,
+        "title": "Notice Type Breakdown",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": {
+          "x": 9,
+          "y": 36,
+          "col": 3,
+          "row": 6
+        },
+        "searchesIndex": 22,
+        "rendererOptions": {}
+      },
+      {
+        "id": 24,
+        "title": "Switch Notices — SwitchThrow* detection events",
+        "renderer": "text",
+        "hideZoom": true,
+        "span": {
+          "col": 8,
+          "row": 4,
+          "x": 0,
+          "y": 42
+        },
+        "searchesIndex": 23,
+        "rendererOptions": {}
       }
     ],
     "linkZooming": false,

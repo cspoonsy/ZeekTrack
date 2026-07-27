@@ -64,6 +64,14 @@ class Controller:
             qos=1,
             retain=True,
         )
+        # Deprecation notice — the ChooChoo event runs Modbus for the train.
+        # This controller stays as a demonstrable legacy MQTT surface (still
+        # covered by V1-V10 in VULNERABILITIES.md), but operators pointing
+        # at it should be nudged toward the Modbus profile.
+        log.warning(
+            "MQTT train controller is deprecated for the ChooChoo event; "
+            "the event runs Modbus-only. Set CHOOCHOO_PROTOCOL=modbus.",
+        )
 
     def run(self) -> None:
         self.train.connect()

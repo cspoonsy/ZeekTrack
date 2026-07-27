@@ -4,19 +4,24 @@
 # .50  Tourist     — confused, browsing, never finds anything useful
 # .51  Recon Only  — methodical discovery, maps everything, never pulls the trigger
 # .52  Wrong Path  — tries hard, uses real tools, but wrong assumptions every time
-# .53  The One     — does it right: recon → read beacon → find topic → command train
+# .53  The One     — does it right: recon → find topics → throw switch + Modbus train
+#
+# Control planes (fully separated):
+#   Train motor  = Modbus ONLY   (TCP 5020, host: controller)
+#   Track switch = MQTT ONLY     (topic: choochoo/switch/sw1/cmd/throw, broker: mosquitto:1883)
 #
 # Stop with: docker exec choochoo-attacker pkill -f noise-attendee
 
 set -uo pipefail
 
-SUBNET="172.18.0"
+SUBNET="192.168.100"
 BROKER="${BROKER:-mosquitto}"
 WEB="${WEB:-web-mqtt}"
 CONTROLLER="${CONTROLLER:-controller}"
 MODBUS_HOST="${MODBUS_HOST:-controller}"
 MODBUS_PORT="${MODBUS_PORT:-5020}"
 TRAIN="${TRAIN:-t1}"
+SWITCH="${SWITCH:-sw1}"
 IFACE="eth0"
 
 # Detect which control planes are available at startup
@@ -43,6 +48,7 @@ echo ""
 # .50 — THE TOURIST
 # Plugged in, opened a browser, poked at things, gave up.
 # Generates lots of HTTP noise but never touches MQTT or Modbus.
+# Occasionally trips over the MQTT port with a browser-style curl — never intentional.
 # ─────────────────────────────────────────────────────────────────────────────
 persona_tourist() {
   local IP="${SUBNET}.50"
@@ -67,7 +73,7 @@ persona_tourist() {
       rnd_sleep 0.3 1.2
     done
 
-    # Tries to curl things that aren't HTTP at all
+    # Tries to curl things that aren't HTTP at all — accidental port knock on 1883
     curl -s -o /dev/null --interface "$IP" --max-time 2 \
       "http://${BROKER}:1883/" 2>/dev/null || true
     curl -s -o /dev/null --interface "$IP" --max-time 2 \
@@ -88,6 +94,7 @@ persona_tourist() {
 # .51 — THE RECON PERSON
 # Excellent at discovery. Finds everything. Writes it all down.
 # Never actually sends a command. Paralysed by analysis.
+# Now also discovers switch topics — and still does nothing with them.
 # ─────────────────────────────────────────────────────────────────────────────
 persona_recon() {
   local IP="${SUBNET}.51"
@@ -125,12 +132,21 @@ persona_recon() {
       mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "#" -C 15 -W 5 2>/dev/null || true
       rnd_sleep 2 4
 
-      # Subscribes to specific topics to understand the schema
+      # Subscribes to specific train topics to understand the schema
       for topic in "choochoo/#" \
                    "choochoo/train/#" \
                    "choochoo/train/${TRAIN}/discovery" \
                    "choochoo/train/${TRAIN}/state" \
                    "choochoo/train/${TRAIN}/cmd/+"; do
+        mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "$topic" -C 2 -W 2 2>/dev/null || true
+        rnd_sleep 0.5 1.5
+      done
+
+      # Also discovers the switch subtree — takes notes, does nothing
+      for topic in "choochoo/switch/#" \
+                   "choochoo/switch/${SWITCH}/discovery" \
+                   "choochoo/switch/${SWITCH}/state" \
+                   "choochoo/switch/${SWITCH}/cmd/+"; do
         mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "$topic" -C 2 -W 2 2>/dev/null || true
         rnd_sleep 0.5 1.5
       done
@@ -171,7 +187,8 @@ PY
 # .52 — THE WRONG PATH
 # Technically capable but wrong assumptions at every turn.
 # Tries SQLi, tries default creds, publishes to wrong topics,
-# sends malformed payloads. Real effort, zero results.
+# sends malformed payloads. Confuses Modbus for switch control.
+# Finds the right switch topic but mangles the payload every time.
 # ─────────────────────────────────────────────────────────────────────────────
 persona_wrong_path() {
   local IP="${SUBNET}.52"
@@ -204,7 +221,7 @@ persona_wrong_path() {
       -t "test" -m "hello" 2>/dev/null || true
     rnd_sleep 1 2
 
-    # Publishes to completely wrong MQTT topics
+    # Publishes to completely wrong MQTT train topics
     for topic in \
       "train/motor" \
       "motor/power" \
@@ -219,7 +236,8 @@ persona_wrong_path() {
     done
     rnd_sleep 1 2
 
-    # Publishes to the RIGHT topic but with malformed payloads
+    # Publishes to the RIGHT train MQTT topic but with malformed payloads
+    # (these are ignored now — train only listens to Modbus — but this persona doesn't know that)
     mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
       -t "choochoo/train/${TRAIN}/cmd/motor" \
       -m 'power=100' 2>/dev/null || true           # not JSON
@@ -246,7 +264,8 @@ persona_wrong_path() {
     done
     rnd_sleep 1 2
 
-    # Tries Modbus but uses wrong unit ID and register ranges
+    # Tries Modbus but uses wrong unit ID and register ranges — also tries to
+    # throw the switch via Modbus (completely wrong protocol for the switch)
     if $MODBUS_UP; then
       /opt/attack/bin/python3 - <<PY 2>/dev/null || true
 import asyncio
@@ -259,11 +278,43 @@ async def go():
     await c.read_holding_registers(100, count=10)
     # Tries to write to an input register (read-only — always fails)
     await c.write_register(1, 99)   # IR[1] is MAX_POWER, read-only
+    # Confuses protocols: tries to throw the track switch via Modbus register 2
+    # (switch is MQTT-only — this does nothing, register 2 doesn't exist)
+    await c.write_register(2, 1)    # "throw forward" — wrong protocol entirely
+    await c.write_register(2, 0)    # "throw reverse" — still wrong
     c.close()
 
 asyncio.run(go())
 PY
       rnd_sleep 2 4
+    fi
+
+    # Tries switch throw commands to completely wrong MQTT topics
+    if $MQTT_UP; then
+      for topic in \
+        "switch/throw" \
+        "train/switch" \
+        "choochoo/track/sw1/cmd" \
+        "choochoo/switch/cmd" \
+        "choochoo/sw1/throw"; do
+        mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+          -t "$topic" \
+          -m '{"action":"throw","direction":"forward"}' 2>/dev/null || true
+        rnd_sleep 0.2 0.6
+      done
+      rnd_sleep 1 2
+
+      # Finds the RIGHT topic but mangles the payload every time
+      mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "choochoo/switch/${SWITCH}/cmd/throw" \
+        -m '{"power": 100}' 2>/dev/null || true          # wrong key entirely
+      mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "choochoo/switch/${SWITCH}/cmd/throw" \
+        -m '{"cmd": "throw"}' 2>/dev/null || true         # missing direction
+      mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "choochoo/switch/${SWITCH}/cmd/throw" \
+        -m '{"switch": "forward"}' 2>/dev/null || true    # wrong schema entirely
+      rnd_sleep 1 3
     fi
 
     rnd_sleep 15 30
@@ -272,8 +323,11 @@ PY
 
 # ─────────────────────────────────────────────────────────────────────────────
 # .53 — THE ONE WHO GETS IT
-# Reads the room, finds the beacon, understands the schema,
-# sends valid commands. Train actually responds.
+# Reads the room, recons both control planes, finds the beacon, understands
+# the schema, and executes correctly on both attack paths:
+#   - Track switch: MQTT choochoo/switch/sw1/cmd/throw  (correct path)
+#   - Train motor:  Modbus HR[0] write                  (correct path)
+# MQTT motor commands are NOT used here — train only listens to Modbus.
 # ─────────────────────────────────────────────────────────────────────────────
 persona_success() {
   local IP="${SUBNET}.53"
@@ -282,50 +336,62 @@ persona_success() {
     ROUND=$((ROUND+1))
     log "$IP" "Round $ROUND — The One"
 
-    # Step 1: Identify the network
+    # Step 1: Identify the network — port scan both control planes
     nmap -e "$IFACE" -S "$IP" -sT \
       -p 1883,8000,5020 "${BROKER}" "${WEB}" "${CONTROLLER}" \
       --source-port 55555 2>/dev/null | grep "open" || true
     rnd_sleep 2 4
 
-    # Step 2: Dump broker — read the discovery beacon
-    mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "#" -C 5 -W 3 2>/dev/null || true
-    rnd_sleep 1 2
+    # Step 2: Wildcard broker dump — discover all topics including switch tree
+    if $MQTT_UP; then
+      mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "#" -C 5 -W 3 2>/dev/null || true
+      rnd_sleep 1 2
 
-    # Step 3: Read the discovery beacon specifically — get the cmd_topic
-    mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 \
-      -t "choochoo/train/${TRAIN}/discovery" -C 1 -W 2 2>/dev/null || true
-    rnd_sleep 1 2
+      # Step 3: Read the train discovery beacon
+      mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "choochoo/train/${TRAIN}/discovery" -C 1 -W 2 2>/dev/null || true
+      rnd_sleep 1 2
 
-    # Step 4: Check current state
-    mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 \
-      -t "choochoo/train/${TRAIN}/state" -C 1 -W 2 2>/dev/null || true
-    rnd_sleep 1 2
+      # Step 4: Read the switch discovery beacon — confirms MQTT is the right path
+      log "$IP" "Reading switch discovery beacon"
+      mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "choochoo/switch/${SWITCH}/discovery" -C 1 -W 2 2>/dev/null || true
+      rnd_sleep 1 2
 
-    # Step 5: Send a valid motor command — forward at moderate speed
-    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
-      -t "choochoo/train/${TRAIN}/cmd/motor" \
-      -m '{"power": 60, "direction": "forward"}' 2>/dev/null || true
-    log "$IP" "Sent motor command — train should move"
-    rnd_sleep 4 8
+      # Step 5: Check current switch state before touching anything
+      log "$IP" "Checking switch state"
+      mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "choochoo/switch/${SWITCH}/state" -C 1 -W 2 2>/dev/null || true
+      rnd_sleep 1 2
 
-    # Step 6: Change speed
-    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
-      -t "choochoo/train/${TRAIN}/cmd/motor" \
-      -m '{"power": 30, "direction": "forward"}' 2>/dev/null || true
-    rnd_sleep 3 5
+      # Step 6: Throw switch forward — correct topic, correct payload
+      log "$IP" "Throwing switch forward"
+      mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "choochoo/switch/${SWITCH}/cmd/throw" \
+        -m '{"action": "throw", "direction": "forward"}' 2>/dev/null || true
+      rnd_sleep 3 5
 
-    # Step 7: Stop the train cleanly
-    mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
-      -t "choochoo/train/${TRAIN}/cmd/motor" \
-      -m '{"power": 0}' 2>/dev/null || true
-    log "$IP" "Stopped train"
-    rnd_sleep 2 4
+      # Step 7: Verify state changed after throw
+      log "$IP" "Verifying switch state after throw"
+      mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "choochoo/switch/${SWITCH}/state" -C 1 -W 3 2>/dev/null || true
+      rnd_sleep 3 5
 
-    # Step 8: HTTP API is also a valid attack surface but skipped here to avoid
-    # interfering with real operator commands during a live event.
+      # Step 8: Throw back to reverse — hardware cooldown requires >=3s between throws
+      log "$IP" "Throwing switch reverse"
+      mosquitto_pub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "choochoo/switch/${SWITCH}/cmd/throw" \
+        -m '{"action": "throw", "direction": "reverse"}' 2>/dev/null || true
+      rnd_sleep 4 7
 
-    # Step 9: Modbus path — read register map, then write motor power
+      # Step 9: Verify state returned
+      mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 \
+        -t "choochoo/switch/${SWITCH}/state" -C 1 -W 3 2>/dev/null || true
+      rnd_sleep 2 4
+    fi
+
+    # Step 10: Modbus train control — the ONLY correct path for the train motor
+    # (MQTT motor commands are intentionally absent here — they no longer work)
     if $MODBUS_UP; then
       /opt/attack/bin/python3 - <<PY 2>/dev/null || true
 import asyncio
@@ -341,6 +407,7 @@ async def go():
     target = min(int(max_power * 0.6), max_power)
     await c.write_register(0, target)
     # Let it run, then stop
+    await asyncio.sleep(5)
     await c.write_register(0, 0)
     c.close()
 
@@ -349,7 +416,7 @@ PY
       rnd_sleep 4 8
     fi
 
-    # Long pause — satisfied, watching the train
+    # Long pause — satisfied, watching the train and switch
     rnd_sleep 30 60
   done
 }

@@ -1,8 +1,8 @@
 {
-  "Name": "ChooChoo \u2014 Command Forensics [1h]",
-  "Description": "Deep-dive into commands issued against the train. Shows every MQTT publish and Modbus write with full payload and source context.",
+  "Name": "ChooChoo — Command Forensics [1h]",
+  "Description": "Deep-dive into commands issued against the train. Modbus writes are the primary attack vector; MQTT handles switch throws and broker recon.",
   "Created": "2026-07-10T16:46:08.92182796Z",
-  "Updated": "2026-07-15T13:41:30.736426253Z",
+  "Updated": "2026-07-27T18:00:00Z",
   "Data": {
     "timeframe": {
       "durationString": "PT1H",
@@ -14,22 +14,12 @@
     "searches": [
       {
         "alias": "mqtt_publishes",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
-        "color": null
-      },
-      {
-        "alias": "motor_cmds",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep \"cmd/motor\" | json \"id.orig_h\" payload | table \"id.orig_h\" payload",
-        "color": null
-      },
-      {
-        "alias": "invalid_payloads",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep \"\\\"topic\\\":\\\"choochoo/\" | grep -v \"\\\"payload\\\":\\\"{\"| json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
         "color": null
       },
       {
         "alias": "topic_timeline",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | json topic | count by topic over 30s | chart count by topic",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json topic | count by topic over 30s | chart count by topic",
         "color": null
       },
       {
@@ -38,23 +28,18 @@
         "color": null
       },
       {
-        "alias": "modbus_writes",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | json \"id.orig_h\" func | count | numbercard count",
+        "alias": "modbus_write_count",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | count | numbercard count",
         "color": null
       },
       {
         "alias": "modbus_write_rate",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | json \"id.orig_h\" func | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\" | grep \"\\\"func\\\":\\\"WRITE\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" func | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
         "color": null
       },
       {
         "alias": "modbus_read_rate",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | grep \"\\\"func\\\":\\\"READ\" | json \"id.orig_h\" func | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
-        "color": null
-      },
-      {
-        "alias": "mqtt_cmd_rate",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep \"cmd\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\" | grep \"\\\"func\\\":\\\"READ\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" func | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
         "color": null
       },
       {
@@ -63,429 +48,331 @@
         "color": null
       },
       {
-        "alias": "train_stops",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep \"cmd/stop\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
-        "color": null
-      },
-      {
-        "alias": "train_state",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":false\" | grep \"\\\"topic\\\":\\\"choochoo/train/t1/state\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" payload | table \"id.orig_h\" payload",
-        "color": null
-      },
-      {
-        "alias": "gauge_mqtt_write_vol",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep \"cmd/\" | count | gauge count",
-        "color": null
-      },
-      {
-        "alias": "gauge_modbus_write_vol",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | count | gauge count",
-        "color": null
-      },
-      {
-        "alias": "successful_mqtt_cmds",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep \"\\\"topic\\\":\\\"choochoo/train\" | grep \"cmd/\" | grep \"\\\"payload\\\":\\\"{\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
-        "color": null
-      },
-      {
-        "alias": "successful_modbus_writes",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
-        "color": null
-      },
-      {
-        "alias": "modbus_exceptions",
+        "alias": "modbus_exceptions_by_ip",
         "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep \"\\\"func\\\":\\\"EXCEPTION\" | json \"id.orig_h\" func | count by \"id.orig_h\" func | table \"id.orig_h\" func count",
         "color": null
       },
       {
         "alias": "mqtt_reconnect_rate",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_connect\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.1\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.2\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.3\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.4\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.6\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.8\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_connect\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.1\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.2\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.3\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.4\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.6\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.8\\\"\"| grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
         "color": null
       },
       {
         "alias": "mqtt_pub_rate_by_ip",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
         "color": null
       },
       {
-        "alias": "detect_mqtt_cmds",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.5\\\"\" | grep \"cmd/\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
+        "alias": "detect_switch_throws",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.5\\\"\" | grep \"sw1/cmd/throw\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
         "color": null
       },
       {
         "alias": "detect_modbus_writes",
-        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | grep -v \"\\\"id.orig_h\\\":\\\"172.18.0.10\\\"\" | json \"id.orig_h\" func | table \"id.orig_h\" func",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\"  | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" func | table \"id.orig_h\" func",
+        "color": null
+      },
+      {
+        "alias": "modbus_writes_detail",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus_writes\\\"\" | json \"id.orig_h\" func unit register_start values authorized | sort by TIMESTAMP desc | table \"id.orig_h\" func unit register_start values authorized",
+        "color": null
+      },
+      {
+        "alias": "modbus_exceptions_detail",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus_exceptions\\\"\" | json \"id.orig_h\" func unit exception | sort by TIMESTAMP desc | table \"id.orig_h\" func unit exception",
+        "color": null
+      },
+      {
+        "alias": "ot_notices_detail",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"notice\\\"\" | json \"id.orig_h\" note msg | sort by TIMESTAMP desc | table \"id.orig_h\" note msg",
+        "color": null
+      },
+      {
+        "alias": "mqtt_summary_detail",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_summary\\\"\" | json client publish_count subscribe_count distinct_topics bytes_published | sort by publish_count desc | table client publish_count subscribe_count distinct_topics bytes_published",
+        "color": null
+      },
+      {
+        "alias": "switch_cmd_history",
+        "query": "tag=zeek grep \"switch\" grep \"cmd/throw\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
+        "color": null
+      },
+      {
+        "alias": "switch_recon_then_throw",
+        "query": "tag=zeek grep \"SwitchReconThenThrow\" | json note msg src | table note msg src",
+        "color": null
+      },
+      {
+        "alias": "gauge_modbus_write_vol",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.10\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | count | gauge count",
+        "color": null
+      },
+      {
+        "alias": "switch_throw_count",
+        "query": "tag=zeek grep \"sw1/cmd/throw\" | grep \"\\\"from_client\\\":true\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "modbus_exception_count",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"modbus\\\"\" | grep \"\\\"func\\\":\\\"EXCEPTION\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "invalid_payloads",
+        "query": "tag=zeek grep \"\\\"_path\\\":\\\"mqtt_publish\\\"\" | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"172.19.0.7\\\"\" | grep \"\\\"topic\\\":\\\"choochoo/\" | grep -v \"\\\"payload\\\":\\\"{\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
         "color": null
       }
     ],
     "tiles": [
       {
         "id": 1,
-        "title": "All MQTT Publishes from Clients \u2014 every message sent to the broker",
-        "renderer": "table",
+        "title": "Modbus Writes This Hour",
+        "renderer": "numbercard",
         "hideZoom": true,
-        "span": {
-          "col": 6,
-          "row": 8,
-          "x": 0,
-          "y": 0
-        },
-        "searchesIndex": 0,
+        "span": { "col": 4, "row": 4, "x": 0, "y": 0 },
+        "searchesIndex": 3,
         "rendererOptions": {}
       },
       {
         "id": 2,
-        "title": "Motor Commands Issued \u2014 topic=cmd/motor publishes with payloads",
-        "renderer": "table",
+        "title": "Switch Throws This Hour",
+        "renderer": "numbercard",
         "hideZoom": true,
-        "span": {
-          "col": 6,
-          "row": 8,
-          "x": 6,
-          "y": 0
-        },
-        "searchesIndex": 1,
-        "rendererOptions": {}
-      },
-      {
-        "id": 3,
-        "title": "MQTT Command Rate \u2014 publish frequency per source on cmd topics",
-        "renderer": "lineChart",
-        "hideZoom": false,
-        "span": {
-          "col": 6,
-          "row": 6,
-          "x": 0,
-          "y": 8
-        },
-        "searchesIndex": 8,
-        "rendererOptions": {
-          "Orientation": "stacked",
-          "Stack": "grouped",
-          "Smoothing": "normal",
-          "XAxisSplitLine": "no",
-          "YAxisSplitLine": "no",
-          "IncludeOther": "yes",
-          "ConnectNulls": "yes",
-          "LogScale": "no"
-        }
-      },
-      {
-        "id": 4,
-        "title": "Topic Activity Timeline \u2014 messages per topic over time",
-        "renderer": "lineChart",
-        "hideZoom": false,
-        "span": {
-          "col": 6,
-          "row": 6,
-          "x": 6,
-          "y": 8
-        },
-        "searchesIndex": 3,
-        "rendererOptions": {
-          "Orientation": "stacked",
-          "Stack": "grouped",
-          "Smoothing": "normal",
-          "XAxisSplitLine": "no",
-          "YAxisSplitLine": "no",
-          "IncludeOther": "yes",
-          "ConnectNulls": "yes",
-          "LogScale": "no"
-        }
-      },
-      {
-        "id": 5,
-        "title": "Invalid Payloads \u2014 commands to cmd topics that are not valid JSON",
-        "renderer": "table",
-        "hideZoom": true,
-        "span": {
-          "col": 6,
-          "row": 6,
-          "x": 0,
-          "y": 14
-        },
-        "searchesIndex": 2,
-        "rendererOptions": {}
-      },
-      {
-        "id": 6,
-        "title": "Retained Messages \u2014 discovery beacons and persistent state topics",
-        "renderer": "table",
-        "hideZoom": true,
-        "span": {
-          "col": 6,
-          "row": 6,
-          "x": 6,
-          "y": 14
-        },
-        "searchesIndex": 4,
-        "rendererOptions": {}
-      },
-      {
-        "id": 7,
-        "title": "Modbus Write Commands \u2014 FC5/FC6 writes by source IP",
-        "renderer": "table",
-        "hideZoom": true,
-        "span": {
-          "col": 6,
-          "row": 6,
-          "x": 0,
-          "y": 20
-        },
-        "searchesIndex": 5,
-        "rendererOptions": {}
-      },
-      {
-        "id": 8,
-        "title": "All Modbus Transactions \u2014 full function code log",
-        "renderer": "table",
-        "hideZoom": true,
-        "span": {
-          "col": 6,
-          "row": 6,
-          "x": 6,
-          "y": 20
-        },
-        "searchesIndex": 9,
-        "rendererOptions": {}
-      },
-      {
-        "id": 9,
-        "title": "Modbus Write Rate \u2014 writes per minute per source (spikes = attack)",
-        "renderer": "lineChart",
-        "hideZoom": false,
-        "span": {
-          "col": 6,
-          "row": 6,
-          "x": 0,
-          "y": 26
-        },
-        "searchesIndex": 6,
-        "rendererOptions": {
-          "Orientation": "stacked",
-          "Stack": "grouped",
-          "Smoothing": "normal",
-          "XAxisSplitLine": "no",
-          "YAxisSplitLine": "no",
-          "IncludeOther": "yes",
-          "ConnectNulls": "yes",
-          "LogScale": "no"
-        }
-      },
-      {
-        "id": 10,
-        "title": "Modbus Read Rate \u2014 reads per minute per source (sustained = recon)",
-        "renderer": "lineChart",
-        "hideZoom": false,
-        "span": {
-          "col": 6,
-          "row": 6,
-          "x": 6,
-          "y": 26
-        },
-        "searchesIndex": 7,
-        "rendererOptions": {
-          "Orientation": "stacked",
-          "Stack": "grouped",
-          "Smoothing": "normal",
-          "XAxisSplitLine": "no",
-          "YAxisSplitLine": "no",
-          "IncludeOther": "yes",
-          "ConnectNulls": "yes",
-          "LogScale": "no"
-        }
-      },
-      {
-        "id": 11,
-        "title": "TRAIN STOPS \u2014 power:0 commands by IP",
-        "renderer": "table",
-        "hideZoom": true,
-        "span": {
-          "col": 4,
-          "row": 4,
-          "x": 0,
-          "y": 32
-        },
-        "searchesIndex": 10,
-        "rendererOptions": {}
-      },
-      {
-        "id": 12,
-        "title": "TRAIN STATE SUBSCRIBERS \u2014 non-infra IPs receiving state updates",
-        "renderer": "table",
-        "hideZoom": true,
-        "span": {
-          "col": 4,
-          "row": 4,
-          "x": 4,
-          "y": 32
-        },
-        "searchesIndex": 11,
-        "rendererOptions": {}
-      },
-      {
-        "id": 13,
-        "title": "MQTT Command Volume \u2014 cmd/ publishes this hour (gauge)",
-        "renderer": "gauge",
-        "hideZoom": true,
-        "span": {
-          "col": 2,
-          "row": 4,
-          "x": 8,
-          "y": 32
-        },
-        "searchesIndex": 12,
-        "rendererOptions": {}
-      },
-      {
-        "id": 14,
-        "title": "Modbus Write Volume \u2014 all WRITE function codes this hour (gauge)",
-        "renderer": "gauge",
-        "hideZoom": true,
-        "span": {
-          "col": 2,
-          "row": 4,
-          "x": 10,
-          "y": 32
-        },
-        "searchesIndex": 13,
-        "rendererOptions": {}
-      },
-      {
-        "id": 15,
-        "title": "Successful MQTT Commands \u2014 valid cmd/ publishes per IP over time",
-        "renderer": "lineChart",
-        "hideZoom": false,
-        "span": {
-          "col": 6,
-          "row": 6,
-          "x": 0,
-          "y": 36
-        },
-        "searchesIndex": 14,
-        "rendererOptions": {
-          "Orientation": "stacked",
-          "Stack": "grouped",
-          "Smoothing": "normal",
-          "XAxisSplitLine": "no",
-          "YAxisSplitLine": "no",
-          "IncludeOther": "yes",
-          "ConnectNulls": "yes",
-          "LogScale": "no"
-        }
-      },
-      {
-        "id": 16,
-        "title": "Successful Modbus Writes \u2014 WRITE function codes per IP over time",
-        "renderer": "lineChart",
-        "hideZoom": false,
-        "span": {
-          "col": 6,
-          "row": 6,
-          "x": 6,
-          "y": 36
-        },
-        "searchesIndex": 15,
-        "rendererOptions": {
-          "Orientation": "stacked",
-          "Stack": "grouped",
-          "Smoothing": "normal",
-          "XAxisSplitLine": "no",
-          "YAxisSplitLine": "no",
-          "IncludeOther": "yes",
-          "ConnectNulls": "yes",
-          "LogScale": "no"
-        }
-      },
-      {
-        "id": 17,
-        "title": "Modbus Exception Responses by IP",
-        "renderer": "table",
-        "hideZoom": true,
-        "span": {
-          "col": 4,
-          "row": 4,
-          "x": 0,
-          "y": 42
-        },
-        "searchesIndex": 16,
-        "rendererOptions": {}
-      },
-      {
-        "id": 18,
-        "title": "MQTT Connection Rate Over Time",
-        "renderer": "lineChart",
-        "hideZoom": true,
-        "span": {
-          "col": 4,
-          "row": 4,
-          "x": 4,
-          "y": 42
-        },
-        "searchesIndex": 17,
-        "rendererOptions": {
-          "chartType": "area",
-          "Stack": "grouped",
-          "Smoothing": "normal",
-          "Orientation": "v",
-          "XAxisSplitLine": "no",
-          "YAxisSplitLine": "no",
-          "IncludeOther": "yes",
-          "ConnectNulls": "yes",
-          "LogScale": "no"
-        }
-      },
-      {
-        "id": 19,
-        "title": "MQTT Publish Rate by IP Over Time",
-        "renderer": "lineChart",
-        "hideZoom": true,
-        "span": {
-          "col": 4,
-          "row": 4,
-          "x": 8,
-          "y": 42
-        },
-        "searchesIndex": 18,
-        "rendererOptions": {
-          "chartType": "area",
-          "Stack": "grouped",
-          "Smoothing": "normal",
-          "Orientation": "v",
-          "XAxisSplitLine": "no",
-          "YAxisSplitLine": "no",
-          "IncludeOther": "yes",
-          "ConnectNulls": "yes",
-          "LogScale": "no"
-        }
-      },
-      {
-        "id": 20,
-        "title": "\ud83d\udea8 DETECT \u2014 MQTT Cmd from Unauthorized IP",
-        "renderer": "table",
-        "hideZoom": true,
-        "span": {
-          "col": 6,
-          "row": 4,
-          "x": 0,
-          "y": 46
-        },
+        "span": { "col": 4, "row": 4, "x": 4, "y": 0 },
         "searchesIndex": 19,
         "rendererOptions": {}
       },
       {
-        "id": 21,
-        "title": "\ud83d\udea8 DETECT \u2014 Modbus Write from Unauthorized IP",
-        "renderer": "table",
+        "id": 3,
+        "title": "Modbus Exceptions This Hour",
+        "renderer": "numbercard",
         "hideZoom": true,
-        "span": {
-          "col": 6,
-          "row": 4,
-          "x": 6,
-          "y": 46
-        },
+        "span": { "col": 4, "row": 4, "x": 8, "y": 0 },
         "searchesIndex": 20,
         "rendererOptions": {}
+      },
+      {
+        "id": 4,
+        "title": "Modbus Write Volume — gauge",
+        "renderer": "gauge",
+        "hideZoom": true,
+        "span": { "col": 4, "row": 4, "x": 12, "y": 0 },
+        "searchesIndex": 18,
+        "rendererOptions": {}
+      },
+      {
+        "id": 5,
+        "title": "Modbus Register Writes — every write with register, value, auth status",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 10, "x": 0, "y": 4 },
+        "searchesIndex": 12,
+        "rendererOptions": {}
+      },
+      {
+        "id": 6,
+        "title": "Switch Command History — all throw commands with source IP",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 10, "x": 8, "y": 4 },
+        "searchesIndex": 16,
+        "rendererOptions": {}
+      },
+      {
+        "id": 7,
+        "title": "Modbus Write Rate — writes per source over time (spike = attack)",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 6, "x": 0, "y": 14 },
+        "searchesIndex": 4,
+        "rendererOptions": {
+          "Orientation": "stacked",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": ["#00AB49","#128EE3","#35FF94","#00AAE3","#2B9CFF","#FFFF00","#CD2CD0","#8DC63F","#EE9400","#1B50EA","#00D1A6","#FCF759"]
+        }
+      },
+      {
+        "id": 8,
+        "title": "Modbus Read Rate — sustained reads = register recon",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 6, "x": 8, "y": 14 },
+        "searchesIndex": 5,
+        "rendererOptions": {
+          "Orientation": "stacked",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": ["#00AB49","#128EE3","#35FF94","#00AAE3","#2B9CFF","#FFFF00","#CD2CD0","#8DC63F","#EE9400","#1B50EA","#00D1A6","#FCF759"]
+        }
+      },
+      {
+        "id": 9,
+        "title": "🚨 OT Security Notices — all Zeek detection events",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 8, "x": 0, "y": 20 },
+        "searchesIndex": 14,
+        "rendererOptions": {}
+      },
+      {
+        "id": 10,
+        "title": "🚨 Switch Recon-Then-Throw — deliberate recon before throw",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 8, "x": 8, "y": 20 },
+        "searchesIndex": 17,
+        "rendererOptions": {}
+      },
+      {
+        "id": 11,
+        "title": "All MQTT Publishes — switch throws, recon, retained messages",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 8, "x": 0, "y": 28 },
+        "searchesIndex": 0,
+        "rendererOptions": {}
+      },
+      {
+        "id": 12,
+        "title": "MQTT Publish Rate by Source IP",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 8, "x": 8, "y": 28 },
+        "searchesIndex": 9,
+        "rendererOptions": {
+          "chartType": "area",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "Orientation": "v",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": ["#00AB49","#128EE3","#35FF94","#00AAE3","#2B9CFF","#FFFF00","#CD2CD0","#8DC63F","#EE9400","#1B50EA","#00D1A6","#FCF759"]
+        }
+      },
+      {
+        "id": 13,
+        "title": "🚨 DETECT — Modbus Write from Unauthorized IP",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": { "col": 8, "row": 4, "x": 0, "y": 36 },
+        "searchesIndex": 11,
+        "rendererOptions": {}
+      },
+      {
+        "id": 14,
+        "title": "🚨 DETECT — Switch Throw from External IP",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": { "col": 8, "row": 4, "x": 8, "y": 36 },
+        "searchesIndex": 10,
+        "rendererOptions": {}
+      },
+      {
+        "id": 15,
+        "title": "All Modbus Transactions — full function code log",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 8, "x": 0, "y": 40 },
+        "searchesIndex": 6,
+        "rendererOptions": {}
+      },
+      {
+        "id": 16,
+        "title": "Modbus Exception Log — PLC rejection responses",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 8, "x": 8, "y": 40 },
+        "searchesIndex": 13,
+        "rendererOptions": {}
+      },
+      {
+        "id": 17,
+        "title": "Modbus Exceptions by IP — which sources are getting rejected",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": { "col": 4, "row": 4, "x": 0, "y": 48 },
+        "searchesIndex": 7,
+        "rendererOptions": {}
+      },
+      {
+        "id": 18,
+        "title": "MQTT Client Summary — publish/subscribe volume per client",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": { "col": 4, "row": 4, "x": 4, "y": 48 },
+        "searchesIndex": 15,
+        "rendererOptions": {}
+      },
+      {
+        "id": 19,
+        "title": "Retained Messages — discovery beacons and persistent state topics",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": { "col": 4, "row": 4, "x": 8, "y": 48 },
+        "searchesIndex": 2,
+        "rendererOptions": {}
+      },
+      {
+        "id": 20,
+        "title": "Invalid MQTT Payloads — malformed cmd/ messages",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": { "col": 4, "row": 4, "x": 12, "y": 48 },
+        "searchesIndex": 21,
+        "rendererOptions": {}
+      },
+      {
+        "id": 21,
+        "title": "Topic Activity Timeline — MQTT messages per topic over time",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 6, "x": 0, "y": 52 },
+        "searchesIndex": 1,
+        "rendererOptions": {
+          "Orientation": "stacked",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": ["#00AB49","#128EE3","#35FF94","#00AAE3","#2B9CFF","#FFFF00","#CD2CD0","#8DC63F","#EE9400","#1B50EA","#00D1A6","#FCF759"]
+        }
+      },
+      {
+        "id": 22,
+        "title": "MQTT Connection Rate — broker reconnects per source (flood = attack)",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": { "col": 8, "row": 6, "x": 8, "y": 52 },
+        "searchesIndex": 8,
+        "rendererOptions": {
+          "chartType": "area",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "Orientation": "v",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": ["#00AB49","#128EE3","#35FF94","#00AAE3","#2B9CFF","#FFFF00","#CD2CD0","#8DC63F","#EE9400","#1B50EA","#00D1A6","#FCF759"]
+        }
       }
     ],
     "liveUpdateInterval": 30,

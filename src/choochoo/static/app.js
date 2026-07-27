@@ -48,6 +48,34 @@ function applyState(s) {
   $("power-bar").value = s.power ?? 0;
   trainState.direction = s.direction ?? null;
   trainState.power = s.power ?? 0;
+  renderLinkStatus(s.connected === true ? "up" : s.connected === false ? "down" : "unknown");
+}
+
+// BLE link status: pill in the header + live styling of the topology's
+// controller-to-train segment. `connected` is authoritative — it comes from
+// the controller's TrainClient.state().connected (BuWizzTrain flips it to
+// true only after a successful GATT connect).
+const LINK_STATES = {
+  up:      { cls: "link-pill--up",      text: "BLE • Connected",    line: "#3fb950", label: "BLE (connected)",    trainOpacity: "1"   },
+  down:    { cls: "link-pill--down",    text: "BLE • Disconnected", line: "#f85149", label: "BLE (disconnected)", trainOpacity: "0.3" },
+  unknown: { cls: "link-pill--unknown", text: "BLE • …",            line: "#30363d", label: "BLE",                trainOpacity: "0.6" },
+};
+let linkState = "unknown";
+
+function renderLinkStatus(next) {
+  if (next === linkState) return;
+  linkState = next;
+  const cfg = LINK_STATES[next];
+  const pill = $("link-pill");
+  pill.classList.remove("link-pill--up", "link-pill--down", "link-pill--unknown");
+  pill.classList.add(cfg.cls);
+  $("link-pill-text").textContent = cfg.text;
+  const line = $("link-controller-train");
+  if (line) line.setAttribute("stroke", cfg.line);
+  const label3 = $("label-link3");
+  if (label3) label3.textContent = cfg.label;
+  const trainRect = $("node-train-rect");
+  if (trainRect) trainRect.setAttribute("opacity", cfg.trainOpacity);
 }
 
 // --- Visualization ---------------------------------------------------------
@@ -318,6 +346,7 @@ function connectWs() {
   };
   ws.onclose = () => {
     log("ws closed, reconnecting in 2s");
+    renderLinkStatus("unknown");
     setTimeout(connectWs, 2000);
   };
   ws.onerror = () => ws.close();

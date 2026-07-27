@@ -9,9 +9,14 @@
 @load base/protocols/mqtt
 @load base/protocols/modbus
 
-# ChooChoo runs Modbus on 5020 (non-standard to avoid port conflicts).
-# Tell Zeek's Modbus analyzer to also watch 5020/tcp.
+# The ChooChoo Modbus controller listens on 5020 (non-standard to avoid conflicts
+# in the lab). Tell Zeek's DPD to parse this port as Modbus TCP.
 redef Modbus::ports += { 5020/tcp };
+
+# OT security detections — loaded after the base analyzers so notice types
+# and SumStats reducers are registered before any packets are processed.
+@load ./mqtt-detections
+@load ./modbus-detections
 
 # Emit JSON instead of TSV — one JSON document per line per log stream,
 # which is exactly the format Gravwell's simple_relay `line` reader wants.

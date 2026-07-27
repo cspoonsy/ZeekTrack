@@ -14,12 +14,18 @@ FROM zeek/zeek:latest
 
 COPY local.zeek /usr/local/zeek/share/zeek/site/local.zeek
 
-# Zeek writes logs to its CWD; the compose volume mount will surface
-# /logs on the Vector side.
-RUN mkdir -p /logs
+# OT detection packages (Corelight internal — loaded directly, no zkg required).
+# cluster_relay_lib provides cluster plumbing used by both suites;
+# in standalone mode it is a no-op.
+COPY cluster_relay_lib  /usr/local/zeek/share/zeek/site/cluster_relay_lib
+COPY modbus-detections  /usr/local/zeek/share/zeek/site/modbus-detections
+COPY mqtt-detections    /usr/local/zeek/share/zeek/site/mqtt-detections
+
+# WORKDIR creates /logs if absent — no RUN step needed (avoids AppArmor
+# issues inside unprivileged LXC).
 WORKDIR /logs
 
-# -i eth0     sniff the container's primary interface (bridge network).
-# -C          skip bad-checksum warnings (common under Docker / QEMU).
-# local       load /usr/local/zeek/share/zeek/site/local.zeek (our policy).
-CMD ["/usr/local/zeek/bin/zeek", "-i", "eth0", "-C", "local"]
+# -i br-choochoo0  sniff the named Docker bridge (network_mode: host).
+# -C               skip bad-checksum warnings (common under Docker / QEMU).
+# local            load /usr/local/zeek/share/zeek/site/local.zeek (our policy).
+CMD ["/usr/local/zeek/bin/zeek", "-i", "br-choochoo0", "-C", "local"]

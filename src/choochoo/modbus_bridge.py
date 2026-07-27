@@ -105,7 +105,7 @@ class ModbusBridge:
 
         new_state = TrainState(
             train_id=self.train_id,
-            direction=direction if power > 0 or connected else None,
+            direction=direction,
             power=power,
             connected=connected,
         )
