@@ -22,15 +22,16 @@ from choochoo.protocol import Direction
 SWITCH_TOPIC_ROOT = "choochoo/switch"
 
 # --- Safety envelope --------------------------------------------------------
-# Hard-coded. Tune SWITCH_POWER after the first motor-connected test; the
-# Circuit Cubes community deadband is ~80 but our motor is geared down.
-SWITCH_BURST_MS = 400
-SWITCH_POWER = 60
+# Hard-coded. Tuned against the real sw1 Circuit Cube with a 3-gear train
+# driving a 4-stud rack — 60 didn't move it, 110 nudged it, 130 clears
+# the load with ~850 ms of travel time. Retune if the mechanism changes.
+SWITCH_BURST_MS = 850
+SWITCH_POWER = 130
 SWITCH_COOLDOWN_S = 2.0
 # Hard ceiling. SwitchClient.throw() clamps any duration_ms argument to this
 # value regardless of caller — defense in depth against a bug raising the
 # nominal SWITCH_BURST_MS above what the mechanism tolerates.
-SWITCH_MAX_BURST_MS = 800
+SWITCH_MAX_BURST_MS = 1200
 
 
 def switch_cmd_topic(switch_id: str, action: str) -> str:

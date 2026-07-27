@@ -621,9 +621,10 @@ Topics:
 - `choochoo/switch/<switch_id>/discovery` — retained; capabilities + safety envelope
 
 **Motor safety.** The switch motor burns out if held on. The controller
-enforces a bounded-burst timer (400 ms) at fixed low power, plus a 2 s
-cooldown per switch. Values live as constants in `switch_protocol.py`;
-tune after the first motor-connected test.
+enforces a bounded-burst timer (850 ms) at fixed power (130/255), plus a
+2 s cooldown per switch. Values live as constants in `switch_protocol.py`
+— retune if your gear ratio, rack length, or motor differs from the
+reference sw1 setup.
 
 Run bare-metal alongside the train controller (BLE is host-only):
 
