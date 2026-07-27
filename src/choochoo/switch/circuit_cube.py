@@ -102,7 +102,10 @@ class CircuitCubeSwitch(SwitchClient):
 
         name = os.environ.get("CHOOCHOO_CUBE_NAME", _DEFAULT_NAME)
         log.info("[%s] scanning for Circuit Cube %r over BLE...", self.switch_id, name)
-        device = await BleakScanner.find_device_by_name(name, timeout=_SCAN_TIMEOUT_S)
+        device = await BleakScanner.find_device_by_filter(
+            lambda d, _adv: name in (d.name or ""),
+            timeout=_SCAN_TIMEOUT_S,
+        )
         if device is None:
             raise RuntimeError(
                 f"No BLE device named {name!r} found within {_SCAN_TIMEOUT_S:.0f}s. "
@@ -139,15 +142,18 @@ class CircuitCubeSwitch(SwitchClient):
     async def _async_burst(self, direction: Direction, duration_ms: int) -> None:
         start_frame = encode_frame(direction, SWITCH_POWER, self._port)
         stop_frame = encode_frame(None, 0, self._port)
+        stop_failed: Exception | None = None
         try:
             await self._raw_write(start_frame)
             await asyncio.sleep(duration_ms / 1000)
         finally:
-            # Always attempt the stop write, even if the start raised or the
-            # sleep was cancelled. Suppress the stop-write exception so the
-            # original error (if any) surfaces via the caller.
-            with contextlib.suppress(Exception):
+            try:
                 await self._raw_write(stop_frame)
+            except Exception as e:
+                log.warning("[%s] stop write failed: %s", self.switch_id, e)
+                stop_failed = e
+        if stop_failed is not None:
+            raise stop_failed
 
     async def _raw_write(self, frame: bytes) -> None:
         if self._client is None or self._char is None:

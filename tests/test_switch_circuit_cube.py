@@ -83,6 +83,10 @@ def fake_bleak(monkeypatch):
         async def find_device_by_name(_name, timeout=None):
             return SimpleNamespace(address="AA:BB:CC:DD:EE:FF")
 
+        @staticmethod
+        async def find_device_by_filter(_predicate, timeout=None):
+            return SimpleNamespace(address="AA:BB:CC:DD:EE:FF")
+
     fake_client_holder: dict[str, FakeBleakClient] = {}
 
     def make_client(*args, **kwargs):
@@ -163,6 +167,36 @@ def test_ble_error_during_start_still_writes_stop(fake_bleak, monkeypatch):
         assert outcome is ThrowOutcome.BLE_ERROR
         # The stop frame attempt happened (even though the first write raised).
         assert calls["n"] >= 2
+    finally:
+        s.disconnect()
+
+
+def test_ble_error_during_stop_returns_ble_error_outcome(fake_bleak, monkeypatch):
+    """If the start write succeeds but the stop write raises, throw() must
+    return BLE_ERROR — otherwise the motor may still be running while the
+    operator sees a clean 'ok'."""
+    monkeypatch.setenv("CHOOCHOO_CUBE_PORT", "a")
+    s = CircuitCubeSwitch("sw1")
+    s._burst_duration_override_ms = 20
+    s.connect()
+    try:
+        client = fake_bleak["c"]
+        original = client.write_gatt_char
+        calls = {"n": 0}
+
+        async def flaky(char, data, response=False):
+            calls["n"] += 1
+            # First call is the start frame; second call is the stop frame
+            # in the finally block — that one raises.
+            if calls["n"] == 2:
+                raise RuntimeError("simulated BLE glitch on stop write")
+            await original(char, data, response=response)
+
+        client.write_gatt_char = flaky
+
+        outcome = s.throw(Direction.FORWARD)
+        assert outcome is ThrowOutcome.BLE_ERROR
+        assert calls["n"] == 2  # start attempted, stop attempted
     finally:
         s.disconnect()
 
