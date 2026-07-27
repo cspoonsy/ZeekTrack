@@ -601,12 +601,23 @@ controller↔train segment recolors to match.
 | HR 1 | Holding reg | Light brightness 0..10 |
 | HR 2 | Holding reg | Operator-incremented command counter |
 | Coil 0 | Coil | Emergency stop (write True to trip; latches back) |
+| Coil 1 | Coil | Switch: throw to straight (write True; latches back) |
+| Coil 2 | Coil | Switch: throw to curve (write True; latches back) |
 | IR 0 | Input reg | Current commanded power 0..100 |
 | IR 1 | Input reg | MAX_POWER constant |
 | DI 0 | Discrete input | Train connected |
 | DI 1 | Discrete input | Direction (0 = reverse, 1 = forward) |
+| DI 2 | Discrete input | Switch position = straight (0 if unknown / mid-throw) |
+| DI 3 | Discrete input | Switch position = curve (0 if unknown / mid-throw) |
+| DI 4 | Discrete input | Switch controller online (LWT-driven; 0 if never seen) |
 
 Unit ID `1`. No auth, no TLS — same baseline posture as MQTT mode.
+
+The switch coils/DIs are populated by the Modbus outstation acting as an
+MQTT client to the switch broker (a bridge from OT to IoT that mirrors
+how a real rail HMI unifies protocols). Env vars: `CHOOCHOO_SWITCH_BROKER`
+(default `localhost`), `CHOOCHOO_SWITCH_BROKER_PORT` (default `1883`),
+`CHOOCHOO_SWITCH_ID` (default `sw1`).
 
 ## Topics
 
