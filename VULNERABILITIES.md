@@ -20,6 +20,12 @@
 
 # Part 1 — IoT mode (MQTT)
 
+> **Event note.** The ChooChoo training event runs Modbus for the train
+> and MQTT for the track switch (see Part 3 — S1). The V-series
+> vulnerabilities below still apply to anyone running the legacy MQTT
+> train controller, but the event's live MQTT surface is the switch
+> broker, not the train broker.
+
 ## Network exposure
 
 | Surface           | Exposure                                                         |
@@ -454,6 +460,12 @@ does not, by itself, fix the browser-side problem.**
   could be added as a future stage to parallel the MQTT hardening.
 
 # Part 3 — Track-switch surface (MQTT)
+
+> **Event note.** During the ChooChoo training event the switch broker is
+> the only live MQTT surface. Trainees who reach the LAN and probe
+> `1883/tcp` will find the switch topics under `choochoo/switch/+/#`.
+> The train's MQTT topics (`choochoo/train/+/#`) may also be visible if
+> the legacy controller is running, but the event does not exercise them.
 
 ## S1 — Anonymous throw commands drive real hardware
 

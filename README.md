@@ -14,6 +14,15 @@ control planes that the trainer can flip between with a single flag:
 Both modes drive the same physical train and are intentionally vulnerable in
 their baseline configuration. See `VULNERABILITIES.md` for the catalog.
 
+**Event posture.** The ChooChoo training event runs **Modbus** for the train
+and **MQTT** for a separate track-switch device (Circuit Cubes Bluetooth
+Bit — see the "Track switch" section below). The legacy MQTT train
+controller stays in-repo as a demonstrable IoT surface and is still
+covered by V1–V10 in `VULNERABILITIES.md`, but every entry point logs a
+deprecation warning; operators running the event should use
+`--protocol modbus`. The switch panel is always visible in the web UI
+regardless of the train's protocol.
+
 ## Prerequisites
 
 The fully containerized path needs **only Docker**. The host-mode and

@@ -102,11 +102,19 @@ def send() -> None:
     """Publish a command to the broker."""
 
 
+_SEND_DEPRECATION = (
+    "warning: `choochoo send` targets the MQTT train, which is deprecated "
+    "for the ChooChoo event. Use `choochoo controller --protocol modbus` "
+    "and drive the train from the web UI."
+)
+
+
 @send.command("motor")
 @_broker_opts
 @click.argument("direction", type=click.Choice([d.value for d in Direction]))
 @click.argument("power", type=click.IntRange(0, 100))
 def send_motor(host: str, port: int, train_id: str, direction: str, power: int) -> None:
+    click.echo(_SEND_DEPRECATION, err=True)
     cmd = MotorCommand(direction=Direction(direction), power=power)
     _publish(host, port, cmd_topic(train_id, "motor"), cmd.model_dump())
 
@@ -114,6 +122,7 @@ def send_motor(host: str, port: int, train_id: str, direction: str, power: int) 
 @send.command("stop")
 @_broker_opts
 def send_stop(host: str, port: int, train_id: str) -> None:
+    click.echo(_SEND_DEPRECATION, err=True)
     _publish(host, port, cmd_topic(train_id, "stop"), StopCommand().model_dump())
 
 
@@ -121,6 +130,7 @@ def send_stop(host: str, port: int, train_id: str) -> None:
 @_broker_opts
 @click.argument("brightness", type=click.IntRange(0, 10))
 def send_light(host: str, port: int, train_id: str, brightness: int) -> None:
+    click.echo(_SEND_DEPRECATION, err=True)
     cmd = LightCommand(brightness=brightness)
     _publish(host, port, cmd_topic(train_id, "light"), cmd.model_dump())
 
