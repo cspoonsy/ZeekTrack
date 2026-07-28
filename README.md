@@ -116,8 +116,8 @@ train on the table.
 
 |                | Hardwareless — `docker-compose.fake.yml`                                                             | Hardware — `docker-compose.real.yml`                                                                                    |
 |----------------|------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
-| **MQTT train** | 3 containers: web-mqtt + mosquitto + controller-mqtt (legacy `--profile legacy-web`)                 | 2 containers (web + mosquitto) + controller bare-metal on the host (BLE)                                                |
-| **Modbus train** | 2 containers: web-modbus + controller-modbus                                                       | 1 container (web) + controller bare-metal on the host (BLE)                                                             |
+| **MQTT train** | 3 containers: web-mqtt + mosquitto + controller-mqtt (legacy — `--profile legacy-web` for the web)   | 2 containers (web + mosquitto) + controller bare-metal on the host (BLE). Legacy — web is under `--profile legacy-web`. |
+| **Modbus train** | 2 containers: web-modbus + controller-modbus                                                       | 1 container (web) + controller bare-metal on the host (BLE outstation)                                                  |
 | **Switch (MQTT)** | Stacks on top of either train mode: mosquitto + switch-controller-mqtt (FakeSwitch inside compose) | mosquitto in container + switch controller bare-metal on the host (owns Cube BLE). Same host as the train's BLE radio.  |
 
 The `.real.yml` file has no controller service on purpose: the
@@ -134,9 +134,12 @@ containerized mosquitto over the same host-loopback 1883.
 
 **Event configuration.** Stack `--profile modbus --profile mqtt` on the
 fake stack (or use `.real.yml` for hardware). The `mqtt` profile brings
-up mosquitto and the switch controller *without* the legacy MQTT web
-UI (that lives under `--profile legacy-web`), so port 8000 is free for
-the Modbus web to bind.
+up mosquitto and (on `.fake.yml`) the FakeSwitch controller, both
+*without* the legacy MQTT web UI (that lives under `--profile
+legacy-web`), so port 8000 is free for the Modbus web to bind. On
+`.real.yml` the switch controller is bare-metal via the systemd unit
+`choochoo-switch-controller.service` (see "On the Raspberry Pi" below);
+the `mqtt` profile there only brings up mosquitto.
 
 ## Networking reference
 
@@ -632,15 +635,50 @@ Reproducible Pi deploy (systemd):
 ```sh
 git clone <repo> ~/choochoo && cd ~/choochoo
 ./scripts/pi-setup.sh
-sudo $EDITOR /etc/choochoo/controller.env   # set broker host, hub name, etc.
-sudo systemctl enable --now choochoo-controller
-sudo journalctl -u choochoo-controller -f
+sudo $EDITOR /etc/choochoo/controller.env         # train: broker host, hub name, protocol
+sudo $EDITOR /etc/choochoo/switch-controller.env  # switch: cube name, port, switch id
+sudo systemctl enable --now choochoo-controller choochoo-switch-controller
+sudo journalctl -u choochoo-controller -u choochoo-switch-controller -f
 ```
 
 The setup script installs system packages (bluez, build deps), adds the user
 to the `bluetooth` group, installs `uv`, syncs dependencies with the `pi`
-extra, and drops a templated systemd unit at
-`/etc/systemd/system/choochoo-controller.service`. Re-running is idempotent.
+extra, and drops two templated systemd units at
+`/etc/systemd/system/choochoo-controller.service` (the train — MQTT or
+Modbus outstation depending on env) and
+`/etc/systemd/system/choochoo-switch-controller.service` (the track switch
+— MQTT). Re-running is idempotent.
+
+### Event configuration (Modbus train + MQTT switch)
+
+For the ChooChoo training event the whole stack lives on the Pi:
+
+1. **Bare-metal (BLE-owning) processes** — the two systemd units above.
+   Each owns one BLE peer and reconnects automatically on power-cycle.
+   - `choochoo-controller.service` — Modbus outstation on `0.0.0.0:5020`
+     driving the BuWizz. Config via `/etc/choochoo/controller.env`; the
+     example file has a commented Modbus block ready to uncomment.
+   - `choochoo-switch-controller.service` — MQTT client driving the
+     Circuit Cube. Config via `/etc/choochoo/switch-controller.env`.
+2. **Containerized surfaces** — everything else:
+   ```sh
+   docker compose -f docker-compose.real.yml \
+       --profile modbus --profile mqtt up -d
+   ```
+   `mqtt` brings up mosquitto (both the bare-metal switch controller and
+   the containerized web-modbus point at it). `modbus` brings up the
+   operator's web UI. `web-mqtt` is on a separate `legacy-web` profile
+   so it doesn't collide with `web-modbus` on host port 8000.
+
+Stack `--profile attacker`, `--profile noise`, `--profile sensor`,
+`--profile gravwell` alongside for trainee attack surfaces, background
+traffic, and defender tooling. All four match how they're used in
+`docker-compose.fake.yml`.
+
+The web UI is at `http://<pi>:8000`. Zeek's Modbus and MQTT analyzers
+both light up under the event configuration: `modbus.log` covers M1–M10
+(train HRs/coils + M10 switch throw), `mqtt_publish.log` covers S1–S3
+(switch commands + retained-topic recon + LWT-driven liveness).
 
 `CHOOCHOO_HUB_NAME` defaults to `Smart Hub` (the factory default). If the
 hub was renamed via the Lego Powered Up app, set this to the exact

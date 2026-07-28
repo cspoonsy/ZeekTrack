@@ -94,9 +94,39 @@ class ModbusBridge:
             self._client.close()
 
     async def _poll_once(self) -> None:
-        ir = await self._client.read_input_registers(0, count=IR_COUNT, slave=UNIT_ID)
-        di = await self._client.read_discrete_inputs(0, count=DI_COUNT, slave=UNIT_ID)
+        try:
+            ir = await self._client.read_input_registers(
+                0, count=IR_COUNT, slave=UNIT_ID,
+            )
+            di = await self._client.read_discrete_inputs(
+                0, count=DI_COUNT, slave=UNIT_ID,
+            )
+        except Exception:
+            # Outstation unreachable (socket dead, connection reset,
+            # pymodbus "Not connected"). Publish a disconnected state
+            # so the UI reflects reality, then try to reconnect on the
+            # next tick. pymodbus's client doesn't auto-reconnect after
+            # its socket dies — we do it here.
+            log.warning(
+                "modbus poll failed; publishing disconnected state and "
+                "attempting reconnect",
+                exc_info=True,
+            )
+            self._publish_disconnected()
+            try:
+                await self._client.connect()
+            except Exception:
+                log.debug("modbus reconnect attempt failed", exc_info=True)
+            return
         if ir.isError() or di.isError():
+            # Protocol-level error (e.g. exception response). The socket
+            # is still alive; publish disconnected so the operator sees
+            # something is wrong, but skip the reconnect dance.
+            log.warning(
+                "modbus poll got exception response: ir=%s di=%s",
+                ir, di,
+            )
+            self._publish_disconnected()
             return
         power = int(ir.registers[IR_CURRENT_POWER])
         max_power = int(ir.registers[IR_MAX_POWER])
@@ -115,6 +145,20 @@ class ModbusBridge:
 
         self.state = new_state
         self._fan_out(new_state)
+
+    def _publish_disconnected(self) -> None:
+        """Overwrite the cached state with a connected=false placeholder
+        so consumers stop trusting stale values while the outstation is
+        down. Keeps `train_id` stable so the FastAPI layer's JSON shape
+        doesn't change."""
+        disconnected = TrainState(
+            train_id=self.train_id,
+            direction=None,
+            power=0,
+            connected=False,
+        )
+        self.state = disconnected
+        self._fan_out(disconnected)
 
     # --- writes ------------------------------------------------------------
 
