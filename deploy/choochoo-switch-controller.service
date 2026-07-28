@@ -1,0 +1,23 @@
+[Unit]
+Description=ChooChoo Circuit Cubes track-switch controller
+Documentation=file://@REPO@/README.md
+After=network-online.target bluetooth.service
+Wants=network-online.target
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+User=@USER@
+Group=@USER@
+WorkingDirectory=@REPO@
+# Tunables — broker address, cube name, switch id, etc.
+EnvironmentFile=-/etc/choochoo/switch-controller.env
+ExecStart=@HOME@/.local/bin/uv run choochoo switch-controller
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

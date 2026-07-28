@@ -10,10 +10,20 @@
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-SERVICE_NAME=choochoo-controller
-SERVICE_TEMPLATE="$HERE/deploy/$SERVICE_NAME.service"
-ENV_EXAMPLE="$HERE/deploy/controller.env.example"
-ENV_DEST=/etc/choochoo/controller.env
+
+# Two systemd units get installed: the train controller (Modbus outstation
+# / MQTT controller depending on env) and the track-switch controller
+# (always MQTT). Both are BLE-owning bare-metal processes; the rest of
+# the stack runs in docker-compose.real.yml alongside them.
+TRAIN_SERVICE_NAME=choochoo-controller
+TRAIN_SERVICE_TEMPLATE="$HERE/deploy/$TRAIN_SERVICE_NAME.service"
+TRAIN_ENV_EXAMPLE="$HERE/deploy/controller.env.example"
+TRAIN_ENV_DEST=/etc/choochoo/controller.env
+
+SWITCH_SERVICE_NAME=choochoo-switch-controller
+SWITCH_SERVICE_TEMPLATE="$HERE/deploy/$SWITCH_SERVICE_NAME.service"
+SWITCH_ENV_EXAMPLE="$HERE/deploy/switch-controller.env.example"
+SWITCH_ENV_DEST=/etc/choochoo/switch-controller.env
 
 if [[ "$EUID" -eq 0 ]]; then
   echo "Run this script as the user that will run the controller, not root." >&2
@@ -45,22 +55,35 @@ echo "==> Syncing Python dependencies (--extra pi)"
 cd "$HERE"
 "$UV" sync --extra pi
 
-echo "==> Installing systemd unit"
-TMP=$(mktemp)
-sed -e "s|@USER@|$USER|g" \
-    -e "s|@HOME@|$HOME|g" \
-    -e "s|@REPO@|$HERE|g" \
-    "$SERVICE_TEMPLATE" > "$TMP"
-sudo install -m 644 "$TMP" "/etc/systemd/system/$SERVICE_NAME.service"
-rm -f "$TMP"
+install_unit() {
+  # $1 = service name, $2 = template path, $3 = env-example path, $4 = env dest
+  local svc="$1" template="$2" env_example="$3" env_dest="$4"
+  local tmp
+  tmp=$(mktemp)
+  sed -e "s|@USER@|$USER|g" \
+      -e "s|@HOME@|$HOME|g" \
+      -e "s|@REPO@|$HERE|g" \
+      "$template" > "$tmp"
+  sudo install -m 644 "$tmp" "/etc/systemd/system/$svc.service"
+  rm -f "$tmp"
+
+  if [[ ! -f "$env_dest" ]]; then
+    sudo install -m 644 "$env_example" "$env_dest"
+    echo "  (created $env_dest from example)"
+  else
+    echo "  (kept existing $env_dest)"
+  fi
+}
 
 sudo install -d /etc/choochoo
-if [[ ! -f "$ENV_DEST" ]]; then
-  sudo install -m 644 "$ENV_EXAMPLE" "$ENV_DEST"
-  echo "  (created $ENV_DEST from example)"
-else
-  echo "  (kept existing $ENV_DEST)"
-fi
+
+echo "==> Installing systemd unit: $TRAIN_SERVICE_NAME"
+install_unit "$TRAIN_SERVICE_NAME" "$TRAIN_SERVICE_TEMPLATE" \
+    "$TRAIN_ENV_EXAMPLE" "$TRAIN_ENV_DEST"
+
+echo "==> Installing systemd unit: $SWITCH_SERVICE_NAME"
+install_unit "$SWITCH_SERVICE_NAME" "$SWITCH_SERVICE_TEMPLATE" \
+    "$SWITCH_ENV_EXAMPLE" "$SWITCH_ENV_DEST"
 
 sudo systemctl daemon-reload
 
@@ -68,16 +91,26 @@ cat <<EOF
 
 ==> Setup complete.
 
+Two BLE-owning services are installed. Both run bare-metal (BLE can't be
+containerized without --privileged + host networking).
+
 Next steps:
 
-  1. Edit the controller config:
-       sudo \$EDITOR $ENV_DEST
+  1. Edit the train-controller config (Modbus outstation or MQTT bridge):
+       sudo \$EDITOR $TRAIN_ENV_DEST
 
-  2. Enable and start the service:
-       sudo systemctl enable --now $SERVICE_NAME
+  2. Edit the track-switch controller config:
+       sudo \$EDITOR $SWITCH_ENV_DEST
 
-  3. Watch the logs:
-       sudo journalctl -u $SERVICE_NAME -f
+  3. Enable and start both services:
+       sudo systemctl enable --now $TRAIN_SERVICE_NAME $SWITCH_SERVICE_NAME
+
+  4. Watch the logs:
+       sudo journalctl -u $TRAIN_SERVICE_NAME -u $SWITCH_SERVICE_NAME -f
+
+  5. Bring up the containerized stack (web UI, broker, attacker, sensor,
+     …) alongside them:
+       docker compose -f docker-compose.real.yml --profile modbus --profile mqtt up -d
 
 If you just got added to the bluetooth group, log out and back in first.
 EOF
