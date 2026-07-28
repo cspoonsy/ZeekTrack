@@ -20,7 +20,10 @@ from choochoo.modbus_map import (
     DI_SWITCH_POSITION_CURVE,
     DI_SWITCH_POSITION_STRAIGHT,
 )
-from choochoo.protocol import Direction
+from choochoo.switch_protocol import (
+    UI_CURVE_WIRE_DIRECTION,
+    UI_STRAIGHT_WIRE_DIRECTION,
+)
 
 
 @pytest.fixture
@@ -41,18 +44,22 @@ def ctrl():
 # --- Coil-write behavior ---------------------------------------------------
 
 
-def test_coil_write_straight_calls_mirror_forward(ctrl):
+def test_coil_write_straight_calls_mirror_with_straight_wire_direction(ctrl):
+    """Coil 1 (throw to straight) must publish whatever wire direction
+    the wire<->physical mapping currently says means Straight — not a
+    hard-coded value, because the mapping is a build-time property of
+    the mechanism."""
     c, mirror = ctrl
     c._coils.setValues(CO_SWITCH_TO_STRAIGHT, [True])
-    mirror.throw.assert_called_once_with(Direction.FORWARD)
+    mirror.throw.assert_called_once_with(UI_STRAIGHT_WIRE_DIRECTION)
     # Coil latched back to False.
     assert c._coils.getValues(CO_SWITCH_TO_STRAIGHT, 1) == [False]
 
 
-def test_coil_write_curve_calls_mirror_reverse(ctrl):
+def test_coil_write_curve_calls_mirror_with_curve_wire_direction(ctrl):
     c, mirror = ctrl
     c._coils.setValues(CO_SWITCH_TO_CURVE, [True])
-    mirror.throw.assert_called_once_with(Direction.REVERSE)
+    mirror.throw.assert_called_once_with(UI_CURVE_WIRE_DIRECTION)
     assert c._coils.getValues(CO_SWITCH_TO_CURVE, 1) == [False]
 
 
@@ -86,15 +93,17 @@ def _dis(c) -> tuple[bool, bool, bool]:
     )
 
 
-def test_on_switch_state_forward_online(ctrl):
+def test_on_switch_state_straight_wire_online(ctrl):
+    """Whatever wire direction currently maps to Straight must light up
+    the Straight DI (and only the Straight DI)."""
     c, _ = ctrl
-    c._on_switch_state("forward", True)
+    c._on_switch_state(UI_STRAIGHT_WIRE_DIRECTION.value, True)
     assert _dis(c) == (True, False, True)
 
 
-def test_on_switch_state_reverse_online(ctrl):
+def test_on_switch_state_curve_wire_online(ctrl):
     c, _ = ctrl
-    c._on_switch_state("reverse", True)
+    c._on_switch_state(UI_CURVE_WIRE_DIRECTION.value, True)
     assert _dis(c) == (False, True, True)
 
 
@@ -106,10 +115,10 @@ def test_on_switch_state_unknown_offline(ctrl):
     assert _dis(c) == (False, False, False)
 
 
-def test_on_switch_state_online_none_treated_as_offline(ctrl):
+def test_on_switch_state_known_position_offline_controller(ctrl):
     """Discovery beacon hasn't been seen yet — the outstation must not
     tell a Modbus master the controller is online. Position DI still
     reflects the last known position."""
     c, _ = ctrl
-    c._on_switch_state("forward", None)
+    c._on_switch_state(UI_STRAIGHT_WIRE_DIRECTION.value, None)
     assert _dis(c) == (True, False, False)
