@@ -231,17 +231,34 @@ class _TrainBlock(ModbusSequentialDataBlock):
     def _apply_power(self, signed: int) -> None:
         signed = max(-100, min(100, signed))
         if signed == 0:
+            # stop() is safety-critical and self-shielding — it never
+            # raises even on a dead link (see BuWizzTrain.stop).
             self._train.stop()
             return
         direction = Direction.FORWARD if signed > 0 else Direction.REVERSE
         magnitude = min(abs(signed), MAX_POWER)
         if magnitude != abs(signed):
             log.warning("clamping |power| %d -> %d (MAX_POWER)", abs(signed), magnitude)
-        self._train.motor(direction, magnitude)
+        try:
+            self._train.motor(direction, magnitude)
+        except Exception:
+            # A dead BLE link raises here (BuWizzTrain fast-rejects). Don't
+            # crash the pymodbus response — the DI 0 will already report
+            # disconnected via periodic telemetry, so the operator sees
+            # the failure on the wire.
+            log.warning(
+                "motor command dropped (link not alive)",
+                exc_info=True,
+            )
 
     def _apply_light(self, brightness: int) -> None:
         brightness = max(0, min(10, brightness))
-        self._train.light(brightness)
+        try:
+            self._train.light(brightness)
+        except Exception:
+            # light() is silent on dead link by design, but a real backend
+            # bug could still raise; don't propagate into pymodbus.
+            log.debug("light command dropped", exc_info=True)
 
 
 class ModbusController:
@@ -302,10 +319,23 @@ class ModbusController:
             self.train.disconnect()
 
     async def _serve(self) -> None:
+        # Kick off a periodic telemetry refresh so DI_CONNECTED tracks the
+        # real BLE link status without waiting on operator writes to
+        # trigger _refresh_telemetry via the coil/register hooks. 1 Hz is
+        # fast enough for a wayside-signal HMI; slow enough to be cheap.
+        asyncio.create_task(self._telemetry_loop())
         await StartAsyncTcpServer(
             context=self._context,
             address=(self.cfg.bind, self.cfg.port),
         )
+
+    async def _telemetry_loop(self) -> None:
+        while True:
+            await asyncio.sleep(1.0)
+            try:
+                self._refresh_telemetry()
+            except Exception:
+                log.exception("periodic telemetry refresh failed")
 
     def _refresh_telemetry(self) -> None:
         state = self.train.state()

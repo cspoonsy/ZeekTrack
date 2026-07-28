@@ -6,12 +6,13 @@
 // one global scope.
 (() => {
 
-// Wire <-> visual direction mapping. The physical switch has three gears
-// between the motor and the rack, which inverts rotation direction.
-// Every planned switch in this range uses the same 3-gear mechanism, so
-// this mapping is a fixed system invariant, not a per-switch parameter.
-const UI_STRAIGHT_WIRE_DIRECTION = "forward";
-const UI_CURVE_WIRE_DIRECTION    = "reverse";
+// Wire <-> visual direction mapping. The switch mechanism's gear train
+// determines rack direction relative to motor rotation. sw1's current
+// build maps wire `reverse` -> Straight, wire `forward` -> Curve. Must
+// match UI_STRAIGHT_WIRE_DIRECTION / UI_CURVE_WIRE_DIRECTION in
+// switch_protocol.py — Python is the authoritative source.
+const UI_STRAIGHT_WIRE_DIRECTION = "reverse";
+const UI_CURVE_WIRE_DIRECTION    = "forward";
 
 // Must match SWITCH_COOLDOWN_S in switch_protocol.py (2.0 s = 2000 ms).
 // If that constant changes, update here too — the cooldown progress bar's

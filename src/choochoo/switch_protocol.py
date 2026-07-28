@@ -22,19 +22,23 @@ from choochoo.protocol import Direction
 SWITCH_TOPIC_ROOT = "choochoo/switch"
 
 # --- Wire ↔ physical mapping ------------------------------------------------
-# The switch mechanism has 3 gears between the motor and the rack, so motor
-# rotation direction is inverted at the rack. Every planned switch in this
-# range uses the same mechanism, so these constants are a fixed system
-# invariant. `switch.js` keeps its own JS-side copy of the same mapping;
-# both must stay in sync — Python is the authoritative source.
-UI_STRAIGHT_WIRE_DIRECTION = Direction.FORWARD
-UI_CURVE_WIRE_DIRECTION = Direction.REVERSE
+# The switch mechanism's gear train determines the rack direction relative
+# to motor rotation. sw1's current build maps wire `reverse` → Straight and
+# wire `forward` → Curve (flipped from the earlier 3-gear layout). If you
+# change the gear count again, flip these two constants and update
+# `switch.js`, which keeps its own JS-side copy of the same mapping.
+UI_STRAIGHT_WIRE_DIRECTION = Direction.REVERSE
+UI_CURVE_WIRE_DIRECTION = Direction.FORWARD
 
 # --- Safety envelope --------------------------------------------------------
 # Hard-coded. Tuned against the real sw1 Circuit Cube with a 3-gear train
 # driving a 4-stud rack — 60 didn't move it, 110 nudged it, 130 clears
-# the load with ~850 ms of travel time. Retune if the mechanism changes.
-SWITCH_BURST_MS = 850
+# the load. Full travel initially measured at ~850 ms but the trailing
+# time was stall against the end stop; tightened progressively as
+# over-rotation showed up (500 → 300 → 100 → 200 ms as the sweet spot).
+# Retune if the mechanism changes. If a throw ever fails to reach the
+# stop, bump up in 50 ms steps.
+SWITCH_BURST_MS = 250
 SWITCH_POWER = 130
 SWITCH_COOLDOWN_S = 2.0
 # Hard ceiling. SwitchClient.throw() clamps any duration_ms argument to this

@@ -33,6 +33,10 @@ class SwitchClient(ABC):
     def __init__(self, switch_id: str) -> None:
         self.switch_id = switch_id
         self._connected = False
+        # Live BLE-link view, set by real backends when a write succeeds
+        # (True) or fails (False). FakeSwitch doesn't touch it, so it
+        # tracks `_connected` there.
+        self._link_alive = False
         self._position: SwitchPosition = "unknown"
         self._last_throw_ts: float | None = None
         self._cooldown_until_ts: float | None = None
@@ -74,10 +78,14 @@ class SwitchClient(ABC):
         Must always issue a stop write, even if the burst is interrupted."""
 
     def state(self) -> SwitchState:
+        # Report the live BLE-link view: `_connected` is a coarse "has
+        # connect() ever succeeded" flag; `_link_alive` is toggled by
+        # real writes to reflect the current peer reachability. Both
+        # must be True for consumers to treat the link as usable.
         return SwitchState(
             switch_id=self.switch_id,
             position=self._position,
-            connected=self._connected,
+            connected=self._connected and self._link_alive,
             last_throw_ts=self._last_throw_ts,
             cooldown_until_ts=self._cooldown_until_ts,
         )
