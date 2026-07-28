@@ -42,6 +42,11 @@ _DEFAULT_NAME = "Tenka"
 _SCAN_TIMEOUT_S = 10.0
 _CONNECT_TIMEOUT_S = 15.0
 
+# Auto-reconnect. Mirrors buwizz.py — background task tears the dead
+# client down and re-runs _async_connect with exponential backoff.
+_RECONNECT_INITIAL_S = 5.0
+_RECONNECT_MAX_S = 30.0
+
 
 def encode_frame(direction: Direction | None, magnitude: int, port: str) -> bytes:
     """Return the 5-byte ASCII frame. `direction=None` means stop."""
@@ -66,6 +71,12 @@ class CircuitCubeSwitch(SwitchClient):
         # Test-only hook: shortcut the 400 ms sleep so the test suite stays
         # snappy. Never set in production.
         self._burst_duration_override_ms: int | None = None
+        # Cached BLE address from the first successful connect; lets the
+        # reconnect task skip the 10 s scan window on Cube power-cycles.
+        # Nothing in the wire protocol demands the address survives a
+        # power cycle, but the TI SoC family behind the Cube keeps it.
+        self._cached_address: str | None = None
+        self._reconnect_task: asyncio.Task | None = None
 
     # --- SwitchClient API --------------------------------------------------
 
@@ -90,6 +101,11 @@ class CircuitCubeSwitch(SwitchClient):
             self._connected = False
 
     def _run_burst(self, direction: Direction, duration_ms: int) -> None:
+        # Fast-reject on a known-dead link. The ABC catches the exception
+        # and returns ThrowOutcome.BLE_ERROR — the operator sees the
+        # failure on the wire, and no BLE writes are attempted.
+        if not self._link_alive:
+            raise RuntimeError("BLE link is not currently alive")
         effective = self._burst_duration_override_ms
         if effective is None:
             effective = duration_ms if duration_ms > 0 else SWITCH_BURST_MS
@@ -101,21 +117,32 @@ class CircuitCubeSwitch(SwitchClient):
         from bleak import BleakClient, BleakScanner
 
         name = os.environ.get("CHOOCHOO_CUBE_NAME", _DEFAULT_NAME)
-        log.info("[%s] scanning for Circuit Cube %r over BLE...", self.switch_id, name)
-        device = await BleakScanner.find_device_by_filter(
-            lambda d, _adv: name in (d.name or ""),
-            timeout=_SCAN_TIMEOUT_S,
-        )
-        if device is None:
-            raise RuntimeError(
-                f"No BLE device named {name!r} found within {_SCAN_TIMEOUT_S:.0f}s. "
-                "Is the Circuit Cube powered on? Override the name via "
-                "CHOOCHOO_CUBE_NAME (substring match against the advertised name)."
+        # Fast path — cached address survives a Cube power cycle.
+        if self._cached_address is not None:
+            log.info(
+                "[%s] reconnecting to cached Cube address %s",
+                self.switch_id, self._cached_address,
             )
+            device_or_addr: object = self._cached_address
+            address_for_log = self._cached_address
+        else:
+            log.info("[%s] scanning for Circuit Cube %r over BLE...", self.switch_id, name)
+            device = await BleakScanner.find_device_by_filter(
+                lambda d, _adv: name in (d.name or ""),
+                timeout=_SCAN_TIMEOUT_S,
+            )
+            if device is None:
+                raise RuntimeError(
+                    f"No BLE device named {name!r} found within {_SCAN_TIMEOUT_S:.0f}s. "
+                    "Is the Circuit Cube powered on? Override the name via "
+                    "CHOOCHOO_CUBE_NAME (substring match against the advertised name)."
+                )
+            device_or_addr = device
+            address_for_log = device.address
 
-        client = BleakClient(device, timeout=_CONNECT_TIMEOUT_S)
+        client = BleakClient(device_or_addr, timeout=_CONNECT_TIMEOUT_S)
         await client.connect()
-        log.info("[%s] connected to Cube at %s", self.switch_id, device.address)
+        log.info("[%s] connected to Cube at %s", self.switch_id, address_for_log)
 
         char = self._find_write_characteristic(client)
         if char is None:
@@ -126,8 +153,66 @@ class CircuitCubeSwitch(SwitchClient):
             )
         self._client = client
         self._char = char
+        self._cached_address = address_for_log
+        # No watchdog on the Cube, so we can't probe the link the way
+        # BuWizz does. Mark the link alive optimistically; the next real
+        # write (or a failed write) toggles it correctly.
+        self._link_alive = True
+        loop = asyncio.get_running_loop()
+        if self._reconnect_task is None:
+            self._reconnect_task = loop.create_task(self._reconnect_loop())
+
+    async def _reconnect_loop(self) -> None:
+        """Watches `_link_alive`. When it's False, tear down the dead
+        BleakClient and re-run `_async_connect` with exponential backoff.
+        Runs until disconnected."""
+        delay = _RECONNECT_INITIAL_S
+        try:
+            while True:
+                await asyncio.sleep(0.25)
+                if self._link_alive:
+                    delay = _RECONNECT_INITIAL_S
+                    continue
+
+                if self._client is not None:
+                    try:
+                        await self._client.disconnect()
+                    except Exception:
+                        log.debug(
+                            "[%s] disconnect of dead client raised",
+                            self.switch_id, exc_info=True,
+                        )
+                    self._client = None
+                    self._char = None
+
+                log.info(
+                    "[%s] BLE link dead; reconnect attempt in %.1fs",
+                    self.switch_id, delay,
+                )
+                await asyncio.sleep(delay)
+                try:
+                    await self._async_connect()
+                except Exception:
+                    log.warning(
+                        "[%s] reconnect attempt failed",
+                        self.switch_id, exc_info=True,
+                    )
+                    delay = min(delay * 2, _RECONNECT_MAX_S)
+                    # If the cached address is stale (Cube renamed
+                    # between sessions), fall back to a fresh scan.
+                    self._cached_address = None
+                else:
+                    delay = _RECONNECT_INITIAL_S
+                    log.info("[%s] reconnected", self.switch_id)
+        except asyncio.CancelledError:
+            raise
 
     async def _async_disconnect(self) -> None:
+        if self._reconnect_task is not None:
+            self._reconnect_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._reconnect_task
+            self._reconnect_task = None
         if self._client is None:
             return
         # Best-effort stop before dropping BLE.
@@ -138,6 +223,7 @@ class CircuitCubeSwitch(SwitchClient):
         finally:
             self._client = None
             self._char = None
+            self._link_alive = False
 
     async def _async_burst(self, direction: Direction, duration_ms: int) -> None:
         start_frame = encode_frame(direction, SWITCH_POWER, self._port)
@@ -157,8 +243,18 @@ class CircuitCubeSwitch(SwitchClient):
 
     async def _raw_write(self, frame: bytes) -> None:
         if self._client is None or self._char is None:
+            self._link_alive = False
             raise RuntimeError("CircuitCube not connected")
-        await self._client.write_gatt_char(self._char, frame, response=False)
+        try:
+            await self._client.write_gatt_char(self._char, frame, response=False)
+        except Exception:
+            # Peer unreachable — flip the liveness flag so state() reports
+            # disconnected and the reconnect task takes over. Re-raise so
+            # the burst's finally block still attempts a stop frame.
+            self._link_alive = False
+            raise
+        else:
+            self._link_alive = True
 
     @staticmethod
     def _find_write_characteristic(client) -> object | None:
