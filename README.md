@@ -475,12 +475,15 @@ Trainer answer key (host-side, never inside the container):
 - `attacker/SOLUTIONS.md` — suggested progression with concrete payloads
 - `VULNERABILITIES.md` — full vulnerability catalog with Zeek detection hooks
 
-## Quick start — real train on Mac / Linux workstation (hybrid)
+## Quick start — real hardware on Mac / Linux workstation (hybrid)
 
 For local hardware demos where the developer machine has the BLE
 radio — a Mac with Bluetooth permission, or a Linux box with `bluez`.
-The controller runs on the host (owns BLE); everything else runs in
-containers via `docker-compose.real.yml`. Two terminals, one per role.
+The BLE-owning **controllers run bare-metal on the host** (Docker on
+macOS has no BLE passthrough; on Linux it needs `--privileged` + host
+networking); everything else runs in containers via
+`docker-compose.real.yml`. Each bare-metal controller needs its own
+terminal.
 
 **Prerequisites — install the BLE extra once:**
 
@@ -493,18 +496,25 @@ macOS (bleak's CoreBluetooth backend). On macOS, grant your terminal
 Bluetooth permission the first time it scans: System Settings →
 Privacy & Security → Bluetooth.
 
-### Modbus mode (Enterprise / OT)
+Two BLE devices, two bare-metal processes. Neither is in
+`docker-compose.real.yml` on purpose.
+
+### Train — Modbus mode (Enterprise / OT)
 
 ```sh
-# Terminal 1 — bring up the web UI in a container. It'll poll the
-# host outstation at host.docker.internal:5020.
+# Terminal 1 — web UI in a container. It polls the host outstation at
+# host.docker.internal:5020 for the train and reaches mosquitto for
+# the switch panel (--profile mqtt below).
 docker compose -f docker-compose.real.yml --profile modbus up --build -d
 
-# Terminal 2 — controller runs bare-metal on this Mac. Owns the BLE
-# radio, hosts the Modbus outstation on 0.0.0.0:5020.
+# Terminal 2 — train controller bare-metal. Owns the BuWizz BLE
+# radio, hosts the Modbus outstation on 0.0.0.0:5020, and also
+# subscribes to the switch broker so its M10 coil handlers work
+# (see the event-configuration section below).
 CHOOCHOO_PROTOCOL=modbus \
 CHOOCHOO_TRAIN=buwizz \
 CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
+CHOOCHOO_SWITCH_BROKER=localhost \
     uv run choochoo -v controller
 ```
 
@@ -516,28 +526,93 @@ turns solid green. If the pill stays at `BLE • …`, the web
 container can't reach the host outstation — see the troubleshooting
 sub-section below.
 
-### MQTT mode (IoT)
+### Train — MQTT mode (legacy IoT)
 
 ```sh
 # Terminal 1 — Mosquitto broker + web UI in containers. The broker
 # publishes 1883 on the host loopback so the bare-metal controller
 # can reach it at localhost:1883.
-docker compose -f docker-compose.real.yml --profile mqtt up --build -d
+docker compose -f docker-compose.real.yml --profile mqtt --profile legacy-web up --build -d
 
-# Terminal 2 — controller runs bare-metal on this Mac.
+# Terminal 2 — train controller bare-metal.
 CHOOCHOO_TRAIN=buwizz \
 CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
 CHOOCHOO_BROKER=localhost \
     uv run choochoo -v controller
 ```
 
-### Stacking defender / attacker / noise on the real train
+The legacy MQTT web UI is under `--profile legacy-web` so it doesn't
+collide with `web-modbus` on host port 8000.
+
+### Track switch — MQTT (any train mode)
+
+The switch is always MQTT-only and always runs bare-metal on the
+host. It reaches the containerized `mosquitto` at `localhost:1883`
+(the broker publishes on the host loopback under both `--profile mqtt`
+and `--profile modbus`, provided `--profile mqtt` is included).
+
+```sh
+# Terminal 3 — switch controller bare-metal. Owns the Circuit Cube
+# BLE handle. Connects out to the containerized broker.
+CHOOCHOO_SWITCH_KIND=circuit_cube \
+CHOOCHOO_CUBE_NAME=Tenka \
+CHOOCHOO_CUBE_PORT=a \
+CHOOCHOO_BROKER=localhost \
+    uv run choochoo -v switch-controller
+```
+
+When it logs `connected to Cube at <addr>` and `connected rc=Success,
+subscribing to choochoo/switch/sw1/cmd/+`, the "Track switch" panel
+in the web UI flips its liveness pill to **Switch · Connected**
+(green). The retained state also updates on every throw, so the
+position pill (Straight / Curve) reflects the last commanded
+direction.
+
+Ad-hoc throw from a fourth terminal (useful for verifying without
+clicking the UI):
+
+```sh
+uv run choochoo switch-send throw forward   # wire direction (see mapping notes)
+```
+
+### Event configuration — Modbus train + MQTT switch stacked
+
+The ChooChoo event runs the train under Modbus and the switch under
+MQTT. On the workstation:
+
+```sh
+# Terminal 1 — containers: mosquitto + web-modbus.
+docker compose -f docker-compose.real.yml \
+    --profile modbus --profile mqtt up --build -d
+
+# Terminal 2 — bare-metal train outstation. CHOOCHOO_SWITCH_BROKER
+# lets the outstation's SwitchMirror publish MQTT throws when a
+# Modbus master writes coil 1 or coil 2 (M10).
+CHOOCHOO_PROTOCOL=modbus \
+CHOOCHOO_TRAIN=buwizz \
+CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
+CHOOCHOO_SWITCH_BROKER=localhost \
+    uv run choochoo -v controller
+
+# Terminal 3 — bare-metal switch controller.
+CHOOCHOO_SWITCH_KIND=circuit_cube \
+CHOOCHOO_CUBE_NAME=Tenka \
+CHOOCHOO_CUBE_PORT=a \
+CHOOCHOO_BROKER=localhost \
+    uv run choochoo -v switch-controller
+```
+
+Web UI at <http://localhost:8000>. Both surfaces (train + switch)
+should show connected pills once both bare-metal processes are up.
+
+### Stacking defender / attacker / noise
 
 Same `--profile` flags as `.fake.yml`:
 
 ```sh
 docker compose -f docker-compose.real.yml \
-    --profile modbus --profile attacker --profile noise up -d
+    --profile modbus --profile mqtt \
+    --profile attacker --profile noise up -d
 ```
 
 Caveat for **Modbus + Zeek**: the outstation lives on the host, not
@@ -580,6 +655,44 @@ controller — you forgot `uv sync --extra pi`.
 lines). These are CoreBluetooth's notification-callback selector names,
 **not** errors — the trailing `error_` is just Objective-C's parameter
 slot. Drop the `-v` flag to quiet them.
+
+**Switch panel stays on "Switch · …" or "Switch · Offline".** The web
+container's SwitchBridge can't see the switch controller's retained
+discovery beacon. Check:
+
+```sh
+# 1. Is the bare-metal switch controller running?
+ps aux | grep 'switch-controller' | grep -v grep
+
+# 2. Can the web container reach mosquitto? (mosquitto is only in the
+#    compose network under --profile mqtt — if the profile isn't
+#    active, no broker exists.)
+docker exec choochoo-web-modbus-real python3 -c \
+    "import socket; s=socket.socket(); s.settimeout(2); \
+     s.connect(('mosquitto',1883)); print('tcp ok')"
+
+# 3. Is the switch controller actually connected to the broker?
+docker exec choochoo-mosquitto-real mosquitto_sub \
+    -t 'choochoo/switch/+/discovery' -C 1 -W 2
+# Expect a JSON blob with online:true. If online:false, the LWT
+# fired — the controller crashed or lost broker connectivity.
+```
+
+**Switch controller finds no BLE device.** The Cube's advertised name
+must contain the `CHOOCHOO_CUBE_NAME` substring (default `Tenka`).
+Vendor ships each Cube as `Tenka<4-char-suffix>` — the default matches
+any of them. If you renamed it via the vendor app, set the env var to
+match. To list what's advertising nearby:
+
+```sh
+uv run python -c "import asyncio, bleak; print(asyncio.run(bleak.BleakScanner.discover(timeout=8)))"
+```
+
+**Switch throws visible in the UI but the motor doesn't move.** The
+controller likely lost its BLE handle (macOS CoreBluetooth quirk after
+long idle periods). The reconnect loop will recover on its own within
+~10 s; watch the switch-controller terminal for a fresh `connected to
+Cube at <addr>` log line. If it doesn't recover, restart the process.
 
 ## Quick start — host, no hardware (legacy path)
 
