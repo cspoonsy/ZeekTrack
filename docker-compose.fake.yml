@@ -342,6 +342,33 @@ services:
     profiles: [gravwell]
     restart: unless-stopped
 
+  # --- Admin panel (always-on operator controls) --------------------------
+  # Password-protected panel at http://<host>:9999 for event operators.
+  # Provides: per-container restart/rebuild, full stack teardown+rebuild,
+  # and IP blocking via iptables DOCKER-USER chain.
+  #
+  # SECURITY: Change ADMIN_PASSWORD before running at a public event.
+  # The panel is on a non-guessable port and requires HTTP Basic Auth, but
+  # it has full docker socket + iptables access — treat it like root.
+  admin:
+    image: choochoo-admin:dev
+    build:
+      context: ./admin
+    container_name: choochoo-admin
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - .:/compose:ro
+    environment:
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-choochoo-admin}
+      COMPOSE_FILE: /compose/docker-compose.fake.yml
+      COMPOSE_PROFILES: ${COMPOSE_PROFILES:-mqtt,sensor,gravwell}
+    profiles: [admin]
+    restart: unless-stopped
+
 volumes:
   mosquitto-data-fake:
   zeek-logs:
