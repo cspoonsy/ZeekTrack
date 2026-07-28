@@ -1,0 +1,87 @@
+# These containers are accessible on a physical switch
+# They do not generate east/west traffic with eachother that
+# the switch can see since it does not support reflective relay
+
+# Their east/west traffic will be replayed via tcpreplay and
+# a PCAP. These containers just give the illusion that real
+# devices are on the network and are generating noise
+
+# So if they nmap scan, these devices will respond and show
+# a website and fileshare
+
+networks:
+  macvlan_net:
+    driver: macvlan
+    driver_opts:
+      parent: eth0
+      macvlan_mode: bridge
+    ipam:
+      config:
+        - subnet: 192.168.88.0/24
+
+services:
+  # --- Background traffic (stack with either control plane) ---------------
+  # `noise` profile: fake intranet + SMB share + a workstation that walks a
+  # weighted random schedule of HTTP/SMB/DNS/dashboard traffic. Gives Zeek a
+  # realistic baseline so the attacker's MQTT/Modbus probes have something
+  # to stand out against.
+  intranet:
+    image: nginx:1.27-alpine
+    container_name: choochoo-intranet
+    hostname: intranet
+    volumes:
+      - ./noise/intranet/index.html:/usr/share/nginx/html/index.html:ro
+      - ./noise/intranet/status:/usr/share/nginx/html/status:ro
+      - ./noise/intranet/reports:/usr/share/nginx/html/reports:ro
+      - ./noise/intranet/files:/usr/share/nginx/html/files:ro
+      - ./noise/intranet/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    expose:
+      - "80"
+    networks:
+      macvlan_net:
+        ipv4_address: 192.168.88.50
+    restart: unless-stopped
+
+  fileshare:
+    # samba/server is a small, well-known SMB server image. We mount the
+    # share read-only and allow guest access — no auth, on purpose, so
+    # the user simulator can list/read without credentials.
+    image: dperson/samba
+    container_name: choochoo-fileshare
+    hostname: fileshare
+    command: >
+      -p
+      -s "section7;/share;yes;yes;yes;all;none;all;Section 7 docs"
+    volumes:
+      - ./noise/share:/share:ro
+    expose:
+      - "139"
+      - "445"
+    networks:
+      macvlan_net:
+        ipv4_address: 192.168.88.51
+    restart: unless-stopped
+
+  user:
+    image: choochoo-user:dev
+    build:
+      context: ./noise/user
+    container_name: choochoo-user
+    hostname: workstation
+    environment:
+      # The simulator picks whichever dashboard host is up. With the mqtt
+      # profile this is web-mqtt; with modbus, override via .env or compose
+      # `up` env (`CHOOCHOO_DASHBOARD=http://web-modbus:8000`).
+      CHOOCHOO_DASHBOARD: ${CHOOCHOO_DASHBOARD:-http://web-mqtt:8000}
+      CHOOCHOO_INTRANET: http://intranet
+      CHOOCHOO_FILESHARE_HOST: fileshare
+      CHOOCHOO_FILESHARE_NAME: section7
+    depends_on:
+      - intranet
+      - fileshare
+    networks:
+      macvlan_net:
+        ipv4_address: 192.168.88.52
+    restart: unless-stopped
+
+  
