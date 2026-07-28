@@ -20,10 +20,14 @@ class FakeSwitch(SwitchClient):
     def connect(self) -> None:
         log.info("[%s] connect", self.switch_id)
         self._connected = True
+        # FakeSwitch has no real BLE link; treat "connected" as the sole
+        # liveness signal so state().connected mirrors the ABC's rule.
+        self._link_alive = True
 
     def disconnect(self) -> None:
         log.info("[%s] disconnect", self.switch_id)
         self._connected = False
+        self._link_alive = False
 
     def _run_burst(self, direction: Direction, duration_ms: int) -> None:
         log.info("[%s] throw %s for %d ms", self.switch_id, direction, duration_ms)

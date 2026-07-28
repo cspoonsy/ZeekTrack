@@ -730,7 +730,7 @@ and all three end up at the same BLE frame on the wire.
 | `discovery` | **yes** | controller → subscribers | `SwitchDiscovery` — capabilities + safety envelope + `online` flag. LWT-driven. |
 
 **Motor safety.** The switch motor burns out if held on. The controller
-enforces a bounded-burst timer (850 ms) at fixed power (130/255), plus a
+enforces a bounded-burst timer (500 ms) at fixed power (130/255), plus a
 2 s cooldown per switch. Values live as constants in `switch_protocol.py`
 — retune if your gear ratio, rack length, or motor differs from the
 reference sw1 setup. Every code path that writes a start frame guarantees

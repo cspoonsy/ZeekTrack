@@ -53,6 +53,9 @@ class FakeBleakClient:
     def __init__(self, *_args, **_kwargs) -> None:
         self.writes: list[bytes] = []
         self.disconnected = False
+        # `alive` toggles the write path — flipping it False models a
+        # peer power-cycle so the reconnect tests can exercise it.
+        self.alive = True
         # bleak exposes services as a container of services each with a
         # `characteristics` list. We only need the write characteristic.
         char = SimpleNamespace(
@@ -71,6 +74,8 @@ class FakeBleakClient:
 
     async def write_gatt_char(self, char, data, response=False) -> None:
         assert char.uuid == NUS_WRITE_CHAR_UUID
+        if not self.alive:
+            raise RuntimeError("simulated BLE write failure (peer gone)")
         self.writes.append(bytes(data))
 
 
@@ -206,3 +211,87 @@ def test_invalid_port_env_raises(fake_bleak, monkeypatch):
     s = CircuitCubeSwitch("sw1")
     with pytest.raises(ValueError):
         s.connect()
+
+
+# --- Auto-reconnect --------------------------------------------------------
+
+
+def test_state_reports_disconnected_after_write_failure(fake_bleak, monkeypatch):
+    """SwitchClient.state().connected must go False once the peer stops
+    responding, so the LWT + retained state stay honest."""
+    monkeypatch.setenv("CHOOCHOO_CUBE_PORT", "a")
+    s = CircuitCubeSwitch("sw1")
+    s._burst_duration_override_ms = 20
+    s.connect()
+    try:
+        assert s.state().connected is True
+        fake_bleak["c"].alive = False
+        # A throw on a dead link surfaces BLE_ERROR AND flips the link
+        # flag, so state() reflects the peer loss.
+        outcome = s.throw(Direction.FORWARD)
+        assert outcome is ThrowOutcome.BLE_ERROR
+        assert s.state().connected is False
+    finally:
+        s.disconnect()
+
+
+def test_throw_fast_rejects_on_dead_link(fake_bleak, monkeypatch):
+    """Once the reconnect task knows the link is dead, further throws
+    must return BLE_ERROR without issuing any BLE writes (fast reject
+    matches the buwizz-side behavior)."""
+    monkeypatch.setenv("CHOOCHOO_CUBE_PORT", "a")
+    monkeypatch.setattr("choochoo.switch.circuit_cube._RECONNECT_INITIAL_S", 5.0)
+    s = CircuitCubeSwitch("sw1")
+    s._burst_duration_override_ms = 20
+    s.connect()
+    try:
+        fake_bleak["c"].alive = False
+        # First throw: fails during writes and flips link_alive False.
+        first_outcome = s.throw(Direction.FORWARD)
+        assert first_outcome is ThrowOutcome.BLE_ERROR
+        write_count_before = len(fake_bleak["c"].writes)
+        # Second throw: link_alive is False, cooldown gate is already
+        # sitting (from the last attempt); we bypass by advancing the
+        # clock via set_clock, since the interesting property is that
+        # writes DON'T happen.
+        import time as _time
+        s.set_clock(lambda: _time.time() + 1000.0)
+        outcome = s.throw(Direction.REVERSE)
+        assert outcome is ThrowOutcome.BLE_ERROR
+        # No new writes should have hit the fake client.
+        assert len(fake_bleak["c"].writes) == write_count_before
+    finally:
+        s.disconnect()
+
+
+def test_reconnect_restores_link_after_peer_returns(fake_bleak, monkeypatch):
+    """After the peer disappears and comes back, the reconnect task
+    must re-establish the BLE link without operator intervention."""
+    monkeypatch.setenv("CHOOCHOO_CUBE_PORT", "a")
+    monkeypatch.setattr("choochoo.switch.circuit_cube._RECONNECT_INITIAL_S", 0.2)
+    monkeypatch.setattr("choochoo.switch.circuit_cube._RECONNECT_MAX_S", 0.5)
+
+    s = CircuitCubeSwitch("sw1")
+    s._burst_duration_override_ms = 20
+    s.connect()
+    try:
+        first_client = fake_bleak["c"]
+        assert s.state().connected is True
+        first_client.alive = False
+        outcome = s.throw(Direction.FORWARD)
+        assert outcome is ThrowOutcome.BLE_ERROR
+        assert s.state().connected is False
+
+        # The next FakeBleakClient the factory hands out is alive=True by
+        # default (see FakeBleakClient.__init__), so a fresh reconnect
+        # succeeds.
+        import time
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            if s.state().connected:
+                break
+            time.sleep(0.1)
+        assert s.state().connected is True, "reconnect did not restore link"
+        assert fake_bleak["c"] is not first_client
+    finally:
+        s.disconnect()

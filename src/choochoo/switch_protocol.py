@@ -32,9 +32,12 @@ UI_CURVE_WIRE_DIRECTION = Direction.REVERSE
 
 # --- Safety envelope --------------------------------------------------------
 # Hard-coded. Tuned against the real sw1 Circuit Cube with a 3-gear train
-# driving a 4-stud rack — 60 didn't move it, 110 nudged it, 130 clears
-# the load with ~850 ms of travel time. Retune if the mechanism changes.
-SWITCH_BURST_MS = 850
+# driving a 4-stud rack — 60 didn't move it, 110 nudged it, 130 clears the
+# load. Full travel measured at ~850 ms, tightened to 500 ms once we
+# confirmed the rack reaches its end stop earlier than that (the rest was
+# stall against the stop, which is what we want to avoid). Retune if the
+# mechanism changes.
+SWITCH_BURST_MS = 500
 SWITCH_POWER = 130
 SWITCH_COOLDOWN_S = 2.0
 # Hard ceiling. SwitchClient.throw() clamps any duration_ms argument to this

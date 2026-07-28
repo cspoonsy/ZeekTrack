@@ -63,6 +63,14 @@ _DEFAULT_BLE_NAME = "BuWizz3"
 _SCAN_TIMEOUT_S = 10.0
 _CONNECT_TIMEOUT_S = 15.0
 
+# Auto-reconnect. When the BLE link goes dead (see BuWizzTrain._link_alive),
+# a background task tears down the dead BleakClient and re-runs the connect
+# flow. Backoff starts at _RECONNECT_INITIAL_S and doubles (capped at
+# _RECONNECT_MAX_S) between failures. Tests monkey-patch these to keep
+# the suite fast.
+_RECONNECT_INITIAL_S = 5.0
+_RECONNECT_MAX_S = 30.0
+
 
 def _power_to_int8(direction: Direction, power: int) -> int:
     """Map (direction, 0..100) to BuWizz's signed int8 motor value (-127..127)."""
@@ -81,6 +89,17 @@ class BuWizzTrain(TrainClient):
         self._direction: Direction | None = None
         self._power = 0
         self._connected = False
+        # `_link_alive` is what `state().connected` actually reports.
+        # `_raw_write` sets it True on success and False on any exception
+        # (which is what happens when the peer disappears — CoreBluetooth
+        # keeps `BleakClient.is_connected` True after a peer power-off
+        # until it decides to notice, but writes fail immediately). So a
+        # fresh watchdog ping every second doubles as a liveness probe.
+        self._link_alive = False
+        # Cached BLE address from the first successful connect. Lets the
+        # reconnect task skip the 10 s scan window on hub power-cycles
+        # (the address survives a power cycle on the BuWizz).
+        self._cached_address: str | None = None
 
         # asyncio plumbing.
         self._loop: asyncio.AbstractEventLoop | None = None
@@ -88,6 +107,7 @@ class BuWizzTrain(TrainClient):
         self._client = None  # bleak.BleakClient
         self._char = None  # BleakGATTCharacteristic
         self._keepalive_task: asyncio.Task | None = None
+        self._reconnect_task: asyncio.Task | None = None
 
     # --- TrainClient API ---------------------------------------------------
 
@@ -108,6 +128,14 @@ class BuWizzTrain(TrainClient):
     def motor(self, direction: Direction, power: int) -> None:
         if self._client is None:
             raise RuntimeError("connect() first")
+        # Fast-reject on a dead link so the operator sees the failure
+        # rather than a silent no-op. The reconnect task will bring the
+        # link back on its own; there is no queue.
+        if not self._link_alive:
+            raise RuntimeError(
+                "BLE link is not currently alive — command dropped. "
+                "The controller will reconnect automatically.",
+            )
         signed = _power_to_int8(direction, power)
         frame = bytes([
             _CMD_SET_MOTOR,
@@ -121,14 +149,35 @@ class BuWizzTrain(TrainClient):
         self._power = power
 
     def stop(self) -> None:
-        if self._client is None:
+        # `stop()` is safety-critical: it's called from the outstation's
+        # shutdown path and from the E-stop coil. Do not raise on a dead
+        # link — a raise here would crash the outstation on shutdown or
+        # obscure the E-stop's intent. Log at warning level so the
+        # operator can still see it.
+        if self._client is None or not self._link_alive:
+            log.warning(
+                "[%s] stop() called with link not alive; no BLE write issued",
+                self.train_id,
+            )
+            self._power = 0
             return
         frame = bytes([_CMD_SET_MOTOR, 0, 0, 0, 0, 0, 0, _BRAKE_ALL_PORTS, 0])
-        self._run(self._write(frame))
+        try:
+            self._run(self._write(frame))
+        except Exception:
+            log.warning(
+                "[%s] stop() BLE write failed", self.train_id, exc_info=True,
+            )
         self._power = 0
 
     def light(self, brightness: int) -> None:
-        if self._client is None:
+        if self._client is None or not self._link_alive:
+            # Silent drop, unlike motor(): light is cosmetic. Log at debug
+            # so it doesn't spam.
+            log.debug(
+                "[%s] light() called with link not alive; dropped",
+                self.train_id,
+            )
             return
         # Brightness 0..10 -> white 0..255 across all four LEDs. Sending an
         # empty 0x36 (per the API) reverts to default behavior; we do that
@@ -142,11 +191,15 @@ class BuWizzTrain(TrainClient):
         self._run(self._write(frame))
 
     def state(self) -> TrainState:
+        # `_connected` is a coarse "connect() has been called" flag; not
+        # useful for liveness. `_link_alive` is toggled by _raw_write's
+        # success/failure and is the accurate view of whether the BuWizz
+        # is currently reachable over BLE.
         return TrainState(
             train_id=self.train_id,
             direction=self._direction,
             power=self._power,
-            connected=self._connected,
+            connected=self._connected and self._link_alive,
         )
 
     # --- async internals ---------------------------------------------------
@@ -155,17 +208,31 @@ class BuWizzTrain(TrainClient):
         from bleak import BleakClient, BleakScanner
 
         name = os.environ.get("CHOOCHOO_BUWIZZ_NAME", _DEFAULT_BLE_NAME)
-        log.info("[%s] scanning for BuWizz hub %r over BLE...", self.train_id, name)
-        device = await BleakScanner.find_device_by_name(name, timeout=_SCAN_TIMEOUT_S)
-        if device is None:
-            raise RuntimeError(
-                f"No BLE device named {name!r} found within {_SCAN_TIMEOUT_S:.0f}s. "
-                "Is the BuWizz powered on? Override the name via CHOOCHOO_BUWIZZ_NAME."
+        # Fast path: if we've seen the peer before, its BLE address survives
+        # a power cycle, so skip the 10 s scan and connect straight to the
+        # cached address. `BleakClient` accepts an address string or a
+        # BLEDevice object interchangeably.
+        if self._cached_address is not None:
+            log.info(
+                "[%s] reconnecting to cached BuWizz address %s",
+                self.train_id, self._cached_address,
             )
+            device_or_addr: object = self._cached_address
+            address_for_log = self._cached_address
+        else:
+            log.info("[%s] scanning for BuWizz hub %r over BLE...", self.train_id, name)
+            device = await BleakScanner.find_device_by_name(name, timeout=_SCAN_TIMEOUT_S)
+            if device is None:
+                raise RuntimeError(
+                    f"No BLE device named {name!r} found within {_SCAN_TIMEOUT_S:.0f}s. "
+                    "Is the BuWizz powered on? Override the name via CHOOCHOO_BUWIZZ_NAME."
+                )
+            device_or_addr = device
+            address_for_log = device.address
 
-        client = BleakClient(device, timeout=_CONNECT_TIMEOUT_S)
+        client = BleakClient(device_or_addr, timeout=_CONNECT_TIMEOUT_S)
         await client.connect()
-        log.info("[%s] connected to BuWizz at %s", self.train_id, device.address)
+        log.info("[%s] connected to BuWizz at %s", self.train_id, address_for_log)
 
         char = self._find_app_characteristic(client)
         if char is None:
@@ -179,14 +246,77 @@ class BuWizzTrain(TrainClient):
         await client.start_notify(char, self._on_notify)
         self._client = client
         self._char = char
+        self._cached_address = address_for_log
 
         # Arm the device watchdog and start our keepalive task that re-sends
-        # the last motor frame inside the watchdog window.
+        # the last motor frame inside the watchdog window. The watchdog-arm
+        # write also proves the link is live and flips _link_alive True.
         await self._raw_write(bytes([_CMD_WATCHDOG, _WATCHDOG_TIMEOUT_S]))
         loop = asyncio.get_running_loop()
         self._keepalive_task = loop.create_task(self._keepalive_loop())
+        if self._reconnect_task is None:
+            self._reconnect_task = loop.create_task(self._reconnect_loop())
+
+    async def _reconnect_loop(self) -> None:
+        """Watches `_link_alive`. When it's False, tear down the dead
+        BleakClient and re-run `_async_connect` with exponential backoff.
+        Runs until the object is disconnected (task cancelled)."""
+        delay = _RECONNECT_INITIAL_S
+        try:
+            while True:
+                # Check often; sleep long between attempts.
+                await asyncio.sleep(0.25)
+                if self._link_alive:
+                    delay = _RECONNECT_INITIAL_S
+                    continue
+
+                # Drop the dead client so we can construct a fresh one.
+                if self._client is not None:
+                    try:
+                        await self._client.disconnect()
+                    except Exception:
+                        log.debug(
+                            "[%s] disconnect of dead client raised",
+                            self.train_id, exc_info=True,
+                        )
+                    self._client = None
+                    self._char = None
+                # Cancel keepalive too — it can't work without a client.
+                if self._keepalive_task is not None:
+                    self._keepalive_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await self._keepalive_task
+                    self._keepalive_task = None
+
+                log.info(
+                    "[%s] BLE link dead; reconnect attempt in %.1fs",
+                    self.train_id, delay,
+                )
+                await asyncio.sleep(delay)
+                try:
+                    await self._async_connect()
+                except Exception:
+                    log.warning(
+                        "[%s] reconnect attempt failed", self.train_id, exc_info=True,
+                    )
+                    delay = min(delay * 2, _RECONNECT_MAX_S)
+                    # If the cached address is stale (e.g. the hub was
+                    # renamed in the vendor app between sessions), fall
+                    # back to a fresh scan on the next attempt.
+                    self._cached_address = None
+                else:
+                    delay = _RECONNECT_INITIAL_S
+                    log.info("[%s] reconnected", self.train_id)
+        except asyncio.CancelledError:
+            raise
 
     async def _async_disconnect(self) -> None:
+        if self._reconnect_task is not None:
+            self._reconnect_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._reconnect_task
+            self._reconnect_task = None
+
         if self._keepalive_task is not None:
             self._keepalive_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -234,9 +364,19 @@ class BuWizzTrain(TrainClient):
 
     async def _raw_write(self, frame: bytes) -> None:
         if self._client is None or self._char is None:
+            self._link_alive = False
             raise RuntimeError("BuWizz not connected")
         # write-without-response per the API ("No response is generated").
-        await self._client.write_gatt_char(self._char, frame, response=False)
+        try:
+            await self._client.write_gatt_char(self._char, frame, response=False)
+        except Exception:
+            # Any failure here means the peer is unreachable. Flip the
+            # liveness flag so state() reports disconnected. Re-raise so
+            # callers can react (e.g. the keepalive logs it).
+            self._link_alive = False
+            raise
+        else:
+            self._link_alive = True
 
     def _on_notify(self, _sender, data: bytearray) -> None:
         # Cmd 0x01 status report — most fields are uninteresting for us, but
