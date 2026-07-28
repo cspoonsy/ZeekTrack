@@ -688,6 +688,87 @@ Unit ID `1`. No auth, no TLS — same baseline posture as MQTT mode.
 - `choochoo/train/<train_id>/state` — retained; current direction / power / connection
 - `choochoo/train/<train_id>/discovery` — retained; device manifest (auto-discovery)
 
+### Track switch (BLE via Circuit Cubes)
+
+A second BLE device — a Circuit Cubes Bluetooth Bit — drives a Lego
+gear-rack track switch. The switch controller is a separate process that
+runs alongside the train controller; both share the same broker. The
+switch is reachable from three surfaces (MQTT, Modbus coil, web button)
+and all three end up at the same BLE frame on the wire.
+
+**Topics** (`choochoo/switch/<switch_id>/…`):
+
+| Topic | Retained? | Direction | Payload |
+|---|---|---|---|
+| `cmd/throw` | no | publisher → controller | `{"action":"throw","direction":"forward|reverse"}` |
+| `state` | **yes** | controller → subscribers | `SwitchState` — position, connected, last_throw_ts, cooldown_until_ts |
+| `event` | no | controller → subscribers | `ThrowEvent` — direction + outcome (`ok` / `cooldown_rejected` / `ble_error`) + ts |
+| `discovery` | **yes** | controller → subscribers | `SwitchDiscovery` — capabilities + safety envelope + `online` flag. LWT-driven. |
+
+**Motor safety.** The switch motor burns out if held on. The controller
+enforces a bounded-burst timer (250 ms) at fixed power (130/255), plus a
+2 s cooldown per switch. Values live as constants in `switch_protocol.py`
+— retune if your gear ratio, rack length, or motor differs from the
+reference sw1 setup. Every code path that writes a start frame guarantees
+a stop frame via `try/finally`, so an interrupted throw still stops the
+motor.
+
+**Controller liveness — `discovery.online` vs `state.connected`.** The
+controller publishes two retained payloads with overlapping-looking
+booleans:
+
+- `discovery.online` — set to `true` on the controller's initial connect,
+  and the controller registers a Last Will & Testament with the broker
+  that flips it to `false` on ungraceful disconnect. This is the
+  **authoritative controller-liveness signal**. Both the web UI's pill
+  and the Modbus `DI_SWITCH_ONLINE` DI read it.
+- `state.connected` — a payload field the controller writes about **its
+  own BLE link to the Cube**. It's whatever the controller last published;
+  when the controller dies uncleanly, the retained value stays true forever.
+  Do NOT use this to decide whether the controller is alive.
+
+**3-gear inversion.** The mechanism has 3 gears between the motor and
+the rack, so motor direction is inverted at the rack. On the wire,
+`direction: "forward"` throws the switch to the **Straight** position,
+and `direction: "reverse"` throws to **Curve**. Every planned switch
+uses this mechanism; the mapping is a fixed system invariant. The web
+UI and Modbus outstation both know about it and label buttons/coils
+accordingly (`Throw to Straight` ↔ coil 1 ↔ wire `forward`).
+
+Run bare-metal alongside the train controller (BLE is host-only):
+
+```sh
+CHOOCHOO_SWITCH_KIND=circuit_cube \
+CHOOCHOO_CUBE_NAME=Tenka \
+CHOOCHOO_CUBE_PORT=a \
+    uv run choochoo -v switch-controller
+```
+
+Ad-hoc throw from any host:
+
+```sh
+# Wire direction (matches the MQTT payload).
+uv run choochoo switch-send throw forward   # → Straight (rack backward)
+uv run choochoo switch-send throw reverse   # → Curve (rack forward)
+```
+
+**Modbus surface (M10).** The Modbus outstation also carries the switch.
+Coils 1 (`throw to straight`) and 2 (`throw to curve`) are edge-triggered
+throw commands; DIs 2/3/4 mirror position + controller online. The
+outstation subscribes to the same MQTT topics as the web bridge and
+publishes ThrowCommands on coil writes — a Modbus master doesn't need
+to speak MQTT to throw the switch. See `VULNERABILITIES.md` (M10) for
+the attack pattern and Zeek detection hooks.
+
+**Deferred: BLE stale-handle reconnect.** After long idle periods on
+macOS (~5 h observed), `bleak`'s cached service handles go stale and
+the next `write_gatt_char` raises "Service Discovery has not been
+performed yet". The throw returns `outcome: "ble_error"`, and the
+controller doesn't currently reconnect on its own. Workaround: restart
+the switch controller (`Ctrl-C`, re-run the command above). See the
+"Deferred" section of `docs/superpowers/specs/2026-07-27-modbus-switch-surface.md`
+for the proper fix.
+
 ## Security posture
 
 This system ships with **two profiles** so the trainer can flip between
