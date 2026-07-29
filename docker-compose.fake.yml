@@ -355,14 +355,8 @@ services:
     build:
       context: ./admin
     container_name: choochoo-admin
-    # network_mode: host + NET_ADMIN required for iptables DOCKER-USER access on Linux.
-    # ports: is ignored on Linux host-mode but makes the panel reachable on Docker Desktop
-    # (Mac/Windows) where host-mode doesn't expose ports automatically.
-    network_mode: host
     ports:
       - "9999:9999"
-    cap_add:
-      - NET_ADMIN
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - .:/compose:ro
