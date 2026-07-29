@@ -1,8 +1,6 @@
 {
   "Name": "ChooChoo \u2014 SOC Overview",
   "Description": "General SOC-style view: network pulse, protocol mix, top talkers, MQTT/Modbus/HTTP activity",
-  "Created": "2026-07-13T19:05:28.656105805Z",
-  "Updated": "2026-07-15T18:01:45.730570093Z",
   "Data": {
     "timeframe": {
       "durationString": null,
@@ -673,7 +671,7 @@
       },
       {
         "id": 24,
-        "title": "Switch Notices — SwitchThrow* detection events",
+        "title": "Switch Notices \u2014 SwitchThrow* detection events",
         "renderer": "text",
         "hideZoom": true,
         "span": {
@@ -690,11 +688,5 @@
     "grid": {},
     "version": 2
   },
-  "Labels": null,
-  "Synced": false,
-  "Can": {
-    "Delete": true,
-    "Modify": true,
-    "Share": true
-  }
+  "Labels": null
 }

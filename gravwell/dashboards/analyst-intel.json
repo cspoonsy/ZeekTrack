@@ -1,8 +1,6 @@
 {
   "Name": "ChooChoo \u2014 Analyst Intel [1h]",
   "Description": "One-hour analyst view. Shows who is doing what, which protocols they touched, and early indicators of recon or exploitation.",
-  "Created": "2026-07-10T16:44:45.460011255Z",
-  "Updated": "2026-07-15T15:33:42.74324655Z",
   "Data": {
     "timeframe": {
       "durationString": "PT1H",
@@ -820,7 +818,9 @@
           "y": 54
         },
         "searchesIndex": 29,
-        "rendererOptions": {"chartType": "line"}
+        "rendererOptions": {
+          "chartType": "line"
+        }
       },
       {
         "id": 31,
@@ -842,11 +842,5 @@
     "grid": {},
     "version": 2
   },
-  "Labels": null,
-  "Synced": false,
-  "Can": {
-    "Delete": true,
-    "Modify": true,
-    "Share": true
-  }
+  "Labels": null
 }

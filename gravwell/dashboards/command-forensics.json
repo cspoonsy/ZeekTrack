@@ -1,8 +1,6 @@
 {
-  "Name": "ChooChoo — Command Forensics [1h]",
+  "Name": "ChooChoo \u2014 Command Forensics [1h]",
   "Description": "Deep-dive into commands issued against the train. Modbus writes are the primary attack vector; MQTT handles switch throws and broker recon.",
-  "Created": "2026-07-10T16:46:08.92182796Z",
-  "Updated": "2026-07-27T18:00:00Z",
   "Data": {
     "timeframe": {
       "durationString": "PT1H",
@@ -129,7 +127,12 @@
         "title": "Modbus Writes This Hour",
         "renderer": "numbercard",
         "hideZoom": true,
-        "span": { "col": 4, "row": 4, "x": 0, "y": 0 },
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 0,
+          "y": 0
+        },
         "searchesIndex": 3,
         "rendererOptions": {}
       },
@@ -138,7 +141,12 @@
         "title": "Switch Throws This Hour",
         "renderer": "numbercard",
         "hideZoom": true,
-        "span": { "col": 4, "row": 4, "x": 4, "y": 0 },
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 4,
+          "y": 0
+        },
         "searchesIndex": 19,
         "rendererOptions": {}
       },
@@ -147,43 +155,68 @@
         "title": "Modbus Exceptions This Hour",
         "renderer": "numbercard",
         "hideZoom": true,
-        "span": { "col": 4, "row": 4, "x": 8, "y": 0 },
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 8,
+          "y": 0
+        },
         "searchesIndex": 20,
         "rendererOptions": {}
       },
       {
         "id": 4,
-        "title": "Modbus Write Volume — gauge",
+        "title": "Modbus Write Volume \u2014 gauge",
         "renderer": "gauge",
         "hideZoom": true,
-        "span": { "col": 4, "row": 4, "x": 12, "y": 0 },
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 12,
+          "y": 0
+        },
         "searchesIndex": 18,
         "rendererOptions": {}
       },
       {
         "id": 5,
-        "title": "Modbus Register Writes — every write with register, value, auth status",
+        "title": "Modbus Register Writes \u2014 every write with register, value, auth status",
         "renderer": "table",
         "hideZoom": false,
-        "span": { "col": 8, "row": 10, "x": 0, "y": 4 },
+        "span": {
+          "col": 8,
+          "row": 10,
+          "x": 0,
+          "y": 4
+        },
         "searchesIndex": 12,
         "rendererOptions": {}
       },
       {
         "id": 6,
-        "title": "Switch Command History — all throw commands with source IP",
+        "title": "Switch Command History \u2014 all throw commands with source IP",
         "renderer": "table",
         "hideZoom": false,
-        "span": { "col": 8, "row": 10, "x": 8, "y": 4 },
+        "span": {
+          "col": 8,
+          "row": 10,
+          "x": 8,
+          "y": 4
+        },
         "searchesIndex": 16,
         "rendererOptions": {}
       },
       {
         "id": 7,
-        "title": "Modbus Write Rate — writes per source over time (spike = attack)",
+        "title": "Modbus Write Rate \u2014 writes per source over time (spike = attack)",
         "renderer": "chart",
         "hideZoom": false,
-        "span": { "col": 8, "row": 6, "x": 0, "y": 14 },
+        "span": {
+          "col": 8,
+          "row": 6,
+          "x": 0,
+          "y": 14
+        },
         "searchesIndex": 4,
         "rendererOptions": {
           "Orientation": "stacked",
@@ -194,15 +227,33 @@
           "IncludeOther": "yes",
           "ConnectNulls": "yes",
           "LogScale": "no",
-          "Colors": ["#00AB49","#128EE3","#35FF94","#00AAE3","#2B9CFF","#FFFF00","#CD2CD0","#8DC63F","#EE9400","#1B50EA","#00D1A6","#FCF759"]
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
         "id": 8,
-        "title": "Modbus Read Rate — sustained reads = register recon",
+        "title": "Modbus Read Rate \u2014 sustained reads = register recon",
         "renderer": "chart",
         "hideZoom": false,
-        "span": { "col": 8, "row": 6, "x": 8, "y": 14 },
+        "span": {
+          "col": 8,
+          "row": 6,
+          "x": 8,
+          "y": 14
+        },
         "searchesIndex": 5,
         "rendererOptions": {
           "Orientation": "stacked",
@@ -213,33 +264,61 @@
           "IncludeOther": "yes",
           "ConnectNulls": "yes",
           "LogScale": "no",
-          "Colors": ["#00AB49","#128EE3","#35FF94","#00AAE3","#2B9CFF","#FFFF00","#CD2CD0","#8DC63F","#EE9400","#1B50EA","#00D1A6","#FCF759"]
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
         "id": 9,
-        "title": "🚨 OT Security Notices — all Zeek detection events",
+        "title": "\ud83d\udea8 OT Security Notices \u2014 all Zeek detection events",
         "renderer": "table",
         "hideZoom": false,
-        "span": { "col": 8, "row": 8, "x": 0, "y": 20 },
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 0,
+          "y": 20
+        },
         "searchesIndex": 14,
         "rendererOptions": {}
       },
       {
         "id": 10,
-        "title": "🚨 Switch Recon-Then-Throw — deliberate recon before throw",
+        "title": "\ud83d\udea8 Switch Recon-Then-Throw \u2014 deliberate recon before throw",
         "renderer": "table",
         "hideZoom": false,
-        "span": { "col": 8, "row": 8, "x": 8, "y": 20 },
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 8,
+          "y": 20
+        },
         "searchesIndex": 17,
         "rendererOptions": {}
       },
       {
         "id": 11,
-        "title": "All MQTT Publishes — switch throws, recon, retained messages",
+        "title": "All MQTT Publishes \u2014 switch throws, recon, retained messages",
         "renderer": "table",
         "hideZoom": false,
-        "span": { "col": 8, "row": 8, "x": 0, "y": 28 },
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 0,
+          "y": 28
+        },
         "searchesIndex": 0,
         "rendererOptions": {}
       },
@@ -248,7 +327,12 @@
         "title": "MQTT Publish Rate by Source IP",
         "renderer": "chart",
         "hideZoom": false,
-        "span": { "col": 8, "row": 8, "x": 8, "y": 28 },
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 8,
+          "y": 28
+        },
         "searchesIndex": 9,
         "rendererOptions": {
           "chartType": "area",
@@ -260,87 +344,145 @@
           "IncludeOther": "yes",
           "ConnectNulls": "yes",
           "LogScale": "no",
-          "Colors": ["#00AB49","#128EE3","#35FF94","#00AAE3","#2B9CFF","#FFFF00","#CD2CD0","#8DC63F","#EE9400","#1B50EA","#00D1A6","#FCF759"]
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
         "id": 13,
-        "title": "🚨 DETECT — Modbus Write from Unauthorized IP",
+        "title": "\ud83d\udea8 DETECT \u2014 Modbus Write from Unauthorized IP",
         "renderer": "table",
         "hideZoom": true,
-        "span": { "col": 8, "row": 4, "x": 0, "y": 36 },
+        "span": {
+          "col": 8,
+          "row": 4,
+          "x": 0,
+          "y": 36
+        },
         "searchesIndex": 11,
         "rendererOptions": {}
       },
       {
         "id": 14,
-        "title": "🚨 DETECT — Switch Throw from External IP",
+        "title": "\ud83d\udea8 DETECT \u2014 Switch Throw from External IP",
         "renderer": "table",
         "hideZoom": true,
-        "span": { "col": 8, "row": 4, "x": 8, "y": 36 },
+        "span": {
+          "col": 8,
+          "row": 4,
+          "x": 8,
+          "y": 36
+        },
         "searchesIndex": 10,
         "rendererOptions": {}
       },
       {
         "id": 15,
-        "title": "All Modbus Transactions — full function code log",
+        "title": "All Modbus Transactions \u2014 full function code log",
         "renderer": "table",
         "hideZoom": false,
-        "span": { "col": 8, "row": 8, "x": 0, "y": 40 },
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 0,
+          "y": 40
+        },
         "searchesIndex": 6,
         "rendererOptions": {}
       },
       {
         "id": 16,
-        "title": "Modbus Exception Log — PLC rejection responses",
+        "title": "Modbus Exception Log \u2014 PLC rejection responses",
         "renderer": "table",
         "hideZoom": false,
-        "span": { "col": 8, "row": 8, "x": 8, "y": 40 },
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 8,
+          "y": 40
+        },
         "searchesIndex": 13,
         "rendererOptions": {}
       },
       {
         "id": 17,
-        "title": "Modbus Exceptions by IP — which sources are getting rejected",
+        "title": "Modbus Exceptions by IP \u2014 which sources are getting rejected",
         "renderer": "table",
         "hideZoom": true,
-        "span": { "col": 4, "row": 4, "x": 0, "y": 48 },
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 0,
+          "y": 48
+        },
         "searchesIndex": 7,
         "rendererOptions": {}
       },
       {
         "id": 18,
-        "title": "MQTT Client Summary — publish/subscribe volume per client",
+        "title": "MQTT Client Summary \u2014 publish/subscribe volume per client",
         "renderer": "table",
         "hideZoom": false,
-        "span": { "col": 4, "row": 4, "x": 4, "y": 48 },
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 4,
+          "y": 48
+        },
         "searchesIndex": 15,
         "rendererOptions": {}
       },
       {
         "id": 19,
-        "title": "Retained Messages — discovery beacons and persistent state topics",
+        "title": "Retained Messages \u2014 discovery beacons and persistent state topics",
         "renderer": "table",
         "hideZoom": true,
-        "span": { "col": 4, "row": 4, "x": 8, "y": 48 },
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 8,
+          "y": 48
+        },
         "searchesIndex": 2,
         "rendererOptions": {}
       },
       {
         "id": 20,
-        "title": "Invalid MQTT Payloads — malformed cmd/ messages",
+        "title": "Invalid MQTT Payloads \u2014 malformed cmd/ messages",
         "renderer": "table",
         "hideZoom": true,
-        "span": { "col": 4, "row": 4, "x": 12, "y": 48 },
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 12,
+          "y": 48
+        },
         "searchesIndex": 21,
         "rendererOptions": {}
       },
       {
         "id": 21,
-        "title": "Topic Activity Timeline — MQTT messages per topic over time",
+        "title": "Topic Activity Timeline \u2014 MQTT messages per topic over time",
         "renderer": "chart",
         "hideZoom": false,
-        "span": { "col": 8, "row": 6, "x": 0, "y": 52 },
+        "span": {
+          "col": 8,
+          "row": 6,
+          "x": 0,
+          "y": 52
+        },
         "searchesIndex": 1,
         "rendererOptions": {
           "Orientation": "stacked",
@@ -351,15 +493,33 @@
           "IncludeOther": "yes",
           "ConnectNulls": "yes",
           "LogScale": "no",
-          "Colors": ["#00AB49","#128EE3","#35FF94","#00AAE3","#2B9CFF","#FFFF00","#CD2CD0","#8DC63F","#EE9400","#1B50EA","#00D1A6","#FCF759"]
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       },
       {
         "id": 22,
-        "title": "MQTT Connection Rate — broker reconnects per source (flood = attack)",
+        "title": "MQTT Connection Rate \u2014 broker reconnects per source (flood = attack)",
         "renderer": "chart",
         "hideZoom": false,
-        "span": { "col": 8, "row": 6, "x": 8, "y": 52 },
+        "span": {
+          "col": 8,
+          "row": 6,
+          "x": 8,
+          "y": 52
+        },
         "searchesIndex": 8,
         "rendererOptions": {
           "chartType": "area",
@@ -371,7 +531,20 @@
           "IncludeOther": "yes",
           "ConnectNulls": "yes",
           "LogScale": "no",
-          "Colors": ["#00AB49","#128EE3","#35FF94","#00AAE3","#2B9CFF","#FFFF00","#CD2CD0","#8DC63F","#EE9400","#1B50EA","#00D1A6","#FCF759"]
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
         }
       }
     ],
@@ -380,11 +553,5 @@
     "grid": {},
     "version": 2
   },
-  "Labels": null,
-  "Synced": false,
-  "Can": {
-    "Delete": true,
-    "Modify": true,
-    "Share": true
-  }
+  "Labels": null
 }
