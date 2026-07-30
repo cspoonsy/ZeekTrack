@@ -127,7 +127,7 @@ class SwitchBridge:
     payload field the controller writes about its own BLE link and stays
     stale in retention when the controller dies uncleanly."""
 
-    def __init__(self, host: str, port: int, switch_id: str) -> None:
+    def __init__(self, host: str, port: int, switch_id: str, client_suffix: str = "") -> None:
         self.host = host
         self.port = port
         self.switch_id = switch_id
@@ -135,9 +135,10 @@ class SwitchBridge:
         self._online: bool | None = None
         self._subscribers: set[asyncio.Queue[dict]] = set()
         self._loop: asyncio.AbstractEventLoop | None = None
+        suffix = f"-{client_suffix}" if client_suffix else ""
         self._client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
-            client_id=f"choochoo-web-switch-{switch_id}",
+            client_id=f"choochoo-web-switch-{switch_id}{suffix}",
         )
         mqtt_auth.configure(self._client)
         self._client.on_connect = self._on_connect
@@ -241,7 +242,7 @@ def create_app() -> FastAPI:
     # train is Modbus and CHOOCHOO_BROKER is the outstation host).
     switch_host = os.environ.get("CHOOCHOO_SWITCH_BROKER", host)
     switch_port = int(os.environ.get("CHOOCHOO_SWITCH_BROKER_PORT", mqtt_port))
-    switch_bridge = SwitchBridge(switch_host, switch_port, switch_id)
+    switch_bridge = SwitchBridge(switch_host, switch_port, switch_id, client_suffix=protocol)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
