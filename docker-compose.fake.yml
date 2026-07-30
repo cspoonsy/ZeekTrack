@@ -394,7 +394,9 @@ services:
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-mqtt,sensor,gravwell}
       # Which choochoo web container to proxy train/switch commands through.
       # Use http://choochoo-web-mqtt:8000 when running the mqtt-only profile.
-      TRAIN_API_URL: ${TRAIN_API_URL:-http://choochoo-web-modbus:8000}
+      # host network mode means container names don't resolve — use localhost + mapped port.
+      # web-mqtt is :8000, web-modbus is :8001. Default to mqtt (virtual events).
+      TRAIN_API_URL: ${TRAIN_API_URL:-http://localhost:8000}
     profiles: [admin]
     restart: unless-stopped
     logging:
