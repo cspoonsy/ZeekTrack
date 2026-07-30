@@ -358,17 +358,28 @@ async def stream_logs(source: str, _user: str = Depends(require_auth)):
     except docker.errors.NotFound:
         raise HTTPException(404, f"{container_name} not running")
 
-    # Run the blocking Docker log iterator in a thread; feed an async queue
-    # so uvicorn flushes each line to the browser immediately.
+    # Zeek writes to log files, not stdout — tail notice.log inside the container.
+    # Everything else streams Docker container stdout/stderr as normal.
+    use_exec = (source == "zeek")
+
     async def generate():
         q: asyncio.Queue = asyncio.Queue()
         loop = asyncio.get_event_loop()
 
         def _reader():
             try:
-                for chunk in container.logs(stream=True, follow=True, tail=100, timestamps=True):
-                    data = chunk if isinstance(chunk, bytes) else chunk.encode()
-                    loop.call_soon_threadsafe(q.put_nowait, data)
+                if use_exec:
+                    _, stream = container.exec_run(
+                        ["tail", "-n", "100", "-f", "/logs/notice.log"],
+                        stream=True, demux=False,
+                    )
+                    for chunk in stream:
+                        if chunk:
+                            loop.call_soon_threadsafe(q.put_nowait, chunk)
+                else:
+                    for chunk in container.logs(stream=True, follow=True, tail=100, timestamps=True):
+                        data = chunk if isinstance(chunk, bytes) else chunk.encode()
+                        loop.call_soon_threadsafe(q.put_nowait, data)
             except Exception:
                 pass
             finally:
