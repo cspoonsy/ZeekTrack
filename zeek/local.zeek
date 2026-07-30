@@ -53,7 +53,7 @@ redef modbus_detect::read_sweep_threshold = 20;
 redef modbus_detect::write_escalation_grace = 5min;
 
 # MQTT: only web-mqtt (172.19.0.5) is an authorized publisher to train cmd topics.
-redef mqtt_detect::authorized_publishers += { 172.19.0.5 };
+redef mqtt_detect::authorized_publishers += { [172.19.0.5] = /choochoo\/train\/.*/ };
 
 # Local nets — anything outside these ranges is treated as external.
 # Covers the Docker bridge default (172.16/12) plus common LAN ranges so
