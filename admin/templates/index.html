@@ -1139,8 +1139,8 @@ form.blk { display: block; }
             <span class="log-dot" id="zeek-dot"></span>Zeek
           </div>
           <div class="debug-tab-actions">
-            <button class="btn-ghost btn-xs" onclick="clearLog(_activeTab)">Clear</button>
-            <button class="btn-ghost btn-xs" id="log-toggle-btn" onclick="toggleLog(_activeTab)">Start</button>
+            <button class="btn-ghost btn-xs" onclick="clearLog(window._activeTab)">Clear</button>
+            <button class="btn-ghost btn-xs" id="log-toggle-btn" onclick="toggleLog(window._activeTab)">Start</button>
           </div>
         </div>
         <div class="log-output active" id="modbus-log"><span class="log-empty">— not streaming —</span></div>
