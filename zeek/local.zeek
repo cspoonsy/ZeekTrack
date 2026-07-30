@@ -38,6 +38,11 @@ function log_ext_choochoo(path: string): ChooChooLogExt
 
 redef Log::default_ext_func = log_ext_choochoo;
 
+# Modbus authorized masters — web-modbus container (172.19.0.4) is the only
+# legitimate source of Modbus writes. Anything else gets authorized=F in
+# modbus_writes.log, which fires the UnauthorizedWrite notice.
+redef modbus_detect::authorized_masters += { 172.19.0.4 };
+
 # Local nets — anything outside these ranges is treated as external.
 # Covers the Docker bridge default (172.16/12) plus common LAN ranges so
 # real-hardware sessions work out of the box.
