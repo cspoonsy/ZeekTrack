@@ -14,8 +14,11 @@ Requires:
 
 from __future__ import annotations
 
+import asyncio
 import os
+import queue
 import subprocess
+import threading
 import time
 from typing import Annotated
 
@@ -355,11 +358,28 @@ async def stream_logs(source: str, _user: str = Depends(require_auth)):
     except docker.errors.NotFound:
         raise HTTPException(404, f"{container_name} not running")
 
-    def generate():
-        try:
-            for chunk in container.logs(stream=True, follow=True, tail=100, timestamps=True):
-                yield chunk if isinstance(chunk, bytes) else chunk.encode()
-        except Exception:
-            yield b"[stream ended]\n"
+    # Run the blocking Docker log iterator in a thread; feed an async queue
+    # so uvicorn flushes each line to the browser immediately.
+    async def generate():
+        q: asyncio.Queue = asyncio.Queue()
+        loop = asyncio.get_event_loop()
+
+        def _reader():
+            try:
+                for chunk in container.logs(stream=True, follow=True, tail=100, timestamps=True):
+                    data = chunk if isinstance(chunk, bytes) else chunk.encode()
+                    loop.call_soon_threadsafe(q.put_nowait, data)
+            except Exception:
+                pass
+            finally:
+                loop.call_soon_threadsafe(q.put_nowait, None)
+
+        threading.Thread(target=_reader, daemon=True).start()
+
+        while True:
+            item = await q.get()
+            if item is None:
+                break
+            yield item
 
     return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
