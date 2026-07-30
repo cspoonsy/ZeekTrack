@@ -23,7 +23,7 @@ import docker
 import httpx
 import psutil
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 import secrets
@@ -329,3 +329,37 @@ async def api_switch_throw(request: Request, _user: str = Depends(require_auth))
         return r.json()
     except Exception:
         raise HTTPException(502, "switch unavailable")
+
+
+# ── Live log streaming ────────────────────────────────────────────────────────
+# Streams Docker container logs as newline-delimited text via chunked HTTP.
+# The browser reads it with fetch + ReadableStream — no WebSocket needed.
+
+LOG_SOURCES = {
+    "modbus": "choochoo-controller-modbus",
+    "mqtt":   "choochoo-mosquitto-fake",
+    "web":    "choochoo-web-modbus",
+    "zeek":   "choochoo-zeek",
+}
+
+
+@app.get("/api/logs/{source}")
+async def stream_logs(source: str, _user: str = Depends(require_auth)):
+    container_name = LOG_SOURCES.get(source)
+    if not container_name:
+        raise HTTPException(400, f"Unknown log source '{source}'. Valid: {list(LOG_SOURCES)}")
+    if docker_client is None:
+        raise HTTPException(500, "Docker socket not available")
+    try:
+        container = docker_client.containers.get(container_name)
+    except docker.errors.NotFound:
+        raise HTTPException(404, f"{container_name} not running")
+
+    def generate():
+        try:
+            for chunk in container.logs(stream=True, follow=True, tail=100, timestamps=True):
+                yield chunk if isinstance(chunk, bytes) else chunk.encode()
+        except Exception:
+            yield b"[stream ended]\n"
+
+    return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")

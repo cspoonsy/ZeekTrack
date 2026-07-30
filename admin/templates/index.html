@@ -793,6 +793,95 @@ form.blk { display: block; }
 .toast-motor  { background: rgba(0,171,73,.15);  border: 1px solid rgba(0,171,73,.4);  color: var(--neon); }
 .toast-estop  { background: rgba(205,44,208,.18); border: 1px solid rgba(205,44,208,.5); color: #f0a0f3; }
 .toast-switch { background: rgba(19,142,227,.15); border: 1px solid rgba(19,142,227,.4); color: #6ac4f7; }
+
+/* ── Debug log panes ─────────────────────────────────────── */
+.debug-section { margin-top: 4px; }
+.debug-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 0;
+}
+.debug-toggle .section-label { margin-bottom: 0; }
+.debug-chevron {
+  font-size: 10px;
+  color: var(--dim);
+  transition: transform .2s ease;
+}
+.debug-chevron.open { transform: rotate(90deg); }
+.debug-body {
+  display: none;
+  margin-top: 10px;
+}
+.debug-body.open { display: block; }
+
+.log-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 720px) {
+  .log-grid { grid-template-columns: 1fr; }
+}
+
+.log-pane {
+  background: #161b20;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.log-pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--panel2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.log-pane-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.log-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--border2);
+  flex-shrink: 0;
+}
+.log-dot.live { background: var(--green); animation: ping 2.4s ease-out infinite; }
+.log-pane-actions { display: flex; gap: 6px; }
+.log-output {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #a8b3bc;
+  padding: 10px 14px;
+  height: 240px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-break: break-all;
+  flex: 1;
+}
+.log-output::-webkit-scrollbar { width: 4px; }
+.log-output::-webkit-scrollbar-track { background: transparent; }
+.log-output::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.log-line { margin: 0; padding: 1px 0; border-bottom: none; }
+.log-line .ts { color: var(--dim); margin-right: 6px; }
+.log-line.hl-write { color: #f0a0f3; }
+.log-line.hl-connect { color: var(--neon); }
+.log-line.hl-error { color: var(--yellow); }
+.log-empty { color: var(--dim); font-style: italic; }
 </style>
 </head>
 <body>
@@ -1031,6 +1120,79 @@ form.blk { display: block; }
   </div>
 
   <!-- Teardown + Rebuild — nuclear option at the bottom -->
+  <!-- Debug log streams -->
+  <div class="debug-section">
+    <div class="debug-toggle" onclick="toggleDebug()">
+      <span class="debug-chevron" id="debug-chevron">▶</span>
+      <span class="section-label" style="margin-bottom:0">Debug Logs</span>
+    </div>
+    <div class="debug-body" id="debug-body">
+      <div class="log-grid">
+
+        <!-- Modbus log -->
+        <div class="log-pane">
+          <div class="log-pane-head">
+            <span class="log-pane-title">
+              <span class="log-dot" id="modbus-dot"></span>
+              Modbus Controller
+            </span>
+            <div class="log-pane-actions">
+              <button class="btn-ghost btn-xs" onclick="clearLog('modbus')">Clear</button>
+              <button class="btn-ghost btn-xs" id="modbus-toggle" onclick="toggleLog('modbus')">Start</button>
+            </div>
+          </div>
+          <div class="log-output" id="modbus-log"><span class="log-empty">— not streaming —</span></div>
+        </div>
+
+        <!-- MQTT log -->
+        <div class="log-pane">
+          <div class="log-pane-head">
+            <span class="log-pane-title">
+              <span class="log-dot" id="mqtt-dot"></span>
+              MQTT Broker
+            </span>
+            <div class="log-pane-actions">
+              <button class="btn-ghost btn-xs" onclick="clearLog('mqtt')">Clear</button>
+              <button class="btn-ghost btn-xs" id="mqtt-toggle" onclick="toggleLog('mqtt')">Start</button>
+            </div>
+          </div>
+          <div class="log-output" id="mqtt-log"><span class="log-empty">— not streaming —</span></div>
+        </div>
+
+        <!-- Web-modbus log -->
+        <div class="log-pane">
+          <div class="log-pane-head">
+            <span class="log-pane-title">
+              <span class="log-dot" id="web-dot"></span>
+              Web (Modbus)
+            </span>
+            <div class="log-pane-actions">
+              <button class="btn-ghost btn-xs" onclick="clearLog('web')">Clear</button>
+              <button class="btn-ghost btn-xs" id="web-toggle" onclick="toggleLog('web')">Start</button>
+            </div>
+          </div>
+          <div class="log-output" id="web-log"><span class="log-empty">— not streaming —</span></div>
+        </div>
+
+        <!-- Zeek log -->
+        <div class="log-pane">
+          <div class="log-pane-head">
+            <span class="log-pane-title">
+              <span class="log-dot" id="zeek-dot"></span>
+              Zeek
+            </span>
+            <div class="log-pane-actions">
+              <button class="btn-ghost btn-xs" onclick="clearLog('zeek')">Clear</button>
+              <button class="btn-ghost btn-xs" id="zeek-toggle" onclick="toggleLog('zeek')">Start</button>
+            </div>
+          </div>
+          <div class="log-output" id="zeek-log"><span class="log-empty">— not streaming —</span></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <div class="rebuild-footer">
     <div class="section-label">Last Resort</div>
 
@@ -1284,6 +1446,124 @@ form.blk { display: block; }
 
   pollTrain();
   setInterval(pollTrain, 3000);
+})();
+
+// ── Debug log streaming ───────────────────────────────────────────────────────
+(function () {
+  const streams = {};   // source -> { controller: AbortController }
+
+  // Highlight patterns
+  const HIGHLIGHTS = [
+    { re: /write|inject|FC\s*[56]|WRITE/i,   cls: 'hl-write'   },
+    { re: /connect|subscribe|start/i,         cls: 'hl-connect' },
+    { re: /error|fail|exception|warn/i,       cls: 'hl-error'   },
+  ];
+
+  function appendLine(source, raw) {
+    const el = document.getElementById(source + '-log');
+    if (!el) return;
+
+    // Strip placeholder
+    const empty = el.querySelector('.log-empty');
+    if (empty) empty.remove();
+
+    // Parse optional Docker timestamp prefix (2026-07-30T18:22:48.123456789Z )
+    let ts = '', text = raw;
+    const m = raw.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s+(.*)$/s);
+    if (m) { ts = m[1].substring(11, 19); text = m[2]; }
+
+    const line = document.createElement('p');
+    line.className = 'log-line';
+    for (const {re, cls} of HIGHLIGHTS) {
+      if (re.test(text)) { line.classList.add(cls); break; }
+    }
+    line.innerHTML = (ts ? `<span class="ts">${ts}</span>` : '') +
+      text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+    el.appendChild(line);
+
+    // Keep max 500 lines
+    while (el.children.length > 500) el.removeChild(el.firstChild);
+
+    // Auto-scroll if within 40px of bottom
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 40) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }
+
+  async function startStream(source) {
+    if (streams[source]) return;
+    const ac = new AbortController();
+    streams[source] = { controller: ac };
+
+    const dot = document.getElementById(source + '-dot');
+    const btn = document.getElementById(source + '-toggle');
+    if (dot) dot.classList.add('live');
+    if (btn) btn.textContent = 'Stop';
+
+    try {
+      const resp = await fetch('/api/logs/' + source, {
+        credentials: 'include',
+        signal: ac.signal,
+      });
+      if (!resp.ok || !resp.body) throw new Error('bad response');
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (line.trim()) appendLine(source, line);
+        }
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        appendLine(source, '[stream error: ' + e.message + ']');
+      }
+    } finally {
+      delete streams[source];
+      const dot2 = document.getElementById(source + '-dot');
+      const btn2 = document.getElementById(source + '-toggle');
+      if (dot2) dot2.classList.remove('live');
+      if (btn2) btn2.textContent = 'Start';
+    }
+  }
+
+  function stopStream(source) {
+    if (streams[source]) {
+      streams[source].controller.abort();
+      delete streams[source];
+    }
+    const dot = document.getElementById(source + '-dot');
+    const btn = document.getElementById(source + '-toggle');
+    if (dot) dot.classList.remove('live');
+    if (btn) btn.textContent = 'Start';
+  }
+
+  window.toggleLog = function (source) {
+    if (streams[source]) stopStream(source);
+    else startStream(source);
+  };
+
+  window.clearLog = function (source) {
+    const el = document.getElementById(source + '-log');
+    if (el) {
+      el.innerHTML = '<span class="log-empty">— cleared —</span>';
+    }
+  };
+
+  window.toggleDebug = function () {
+    const body = document.getElementById('debug-body');
+    const chevron = document.getElementById('debug-chevron');
+    const open = body.classList.toggle('open');
+    chevron.classList.toggle('open', open);
+  };
 })();
 </script>
 
