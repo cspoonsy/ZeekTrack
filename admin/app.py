@@ -20,6 +20,7 @@ import time
 from typing import Annotated
 
 import docker
+import httpx
 import psutil
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -31,6 +32,7 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "choochoo-admin")
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 COMPOSE_FILE = os.environ.get("COMPOSE_FILE", "/compose/docker-compose.fake.yml")
 COMPOSE_PROFILES = os.environ.get("COMPOSE_PROFILES", "mqtt,sensor,gravwell").split(",")
+TRAIN_API_URL = os.environ.get("TRAIN_API_URL", "http://choochoo-web-modbus:8000")
 
 RESTARTABLE_CONTAINERS = [
     "choochoo-mosquitto-fake",
@@ -263,3 +265,59 @@ def unblock_ip(ip: Annotated[str, Form()], _user: str = Depends(require_auth)):
             check=False,
         )
     return RedirectResponse("/", status_code=303)
+
+
+# ── Train control proxy ───────────────────────────────────────────────────────
+# Forwards to whichever choochoo web container is active (web-mqtt or
+# web-modbus). The admin panel talks to it by container name via the Docker
+# network. TRAIN_API_URL defaults to web-modbus; override via env if running
+# mqtt-only mode.
+
+_train_client = httpx.AsyncClient(base_url=TRAIN_API_URL, timeout=5.0)
+
+
+@app.get("/api/train/state")
+async def api_train_state(_user: str = Depends(require_auth)):
+    try:
+        r = await _train_client.get("/api/state")
+        return r.json()
+    except Exception:
+        return {"error": "train unavailable"}
+
+
+@app.post("/api/train/motor")
+async def api_train_motor(request: Request, _user: str = Depends(require_auth)):
+    body = await request.json()
+    try:
+        r = await _train_client.post("/api/motor", json=body)
+        return r.json()
+    except Exception:
+        raise HTTPException(502, "train unavailable")
+
+
+@app.post("/api/train/stop")
+async def api_train_stop(_user: str = Depends(require_auth)):
+    try:
+        r = await _train_client.post("/api/stop")
+        return r.json()
+    except Exception:
+        raise HTTPException(502, "train unavailable")
+
+
+@app.get("/api/train/switch/state")
+async def api_switch_state(_user: str = Depends(require_auth)):
+    try:
+        r = await _train_client.get("/api/switch/state")
+        return r.json()
+    except Exception:
+        return {"error": "switch unavailable"}
+
+
+@app.post("/api/train/switch/throw")
+async def api_switch_throw(request: Request, _user: str = Depends(require_auth)):
+    body = await request.json()
+    try:
+        r = await _train_client.post("/api/switch/throw", json=body)
+        return r.json()
+    except Exception:
+        raise HTTPException(502, "train unavailable")

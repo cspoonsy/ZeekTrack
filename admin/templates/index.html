@@ -437,6 +437,228 @@ form.blk { display: block; }
   border-color: var(--magenta);
   color: #f5b0f7;
 }
+
+/* ── Train control ───────────────────────────────────────── */
+.train-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 800px) {
+  .train-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 520px) {
+  .train-grid { grid-template-columns: 1fr; }
+}
+
+.train-state-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.state-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.state-key {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+.state-val {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+.pill {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 99px;
+  letter-spacing: .04em;
+}
+.pill-fwd  { background: rgba(0,171,73,.15); color: var(--neon); border: 1px solid rgba(0,171,73,.35); }
+.pill-rev  { background: rgba(19,142,227,.12); color: #6ac4f7; border: 1px solid rgba(19,142,227,.3); }
+.pill-none { background: var(--panel2); color: var(--dim); border: 1px solid var(--border); }
+.pill-ok   { background: rgba(0,171,73,.15); color: var(--neon); border: 1px solid rgba(0,171,73,.35); }
+.pill-warn { background: rgba(212,172,0,.12); color: var(--yellow); border: 1px solid rgba(212,172,0,.3); }
+
+.power-bar-wrap {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel3);
+  overflow: hidden;
+  flex: 1;
+  min-width: 60px;
+}
+.power-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--green);
+  transition: width .3s ease;
+}
+
+/* Motor controls card */
+.motor-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.motor-dir-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.btn-dir {
+  font-family: 'Onest', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 12px 8px;
+  border-radius: var(--r);
+  border: 1px solid var(--border2);
+  background: var(--panel2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn-dir:hover { background: var(--panel3); color: var(--text); border-color: var(--dim); }
+.btn-dir.active-fwd { background: rgba(0,171,73,.15); border-color: rgba(0,171,73,.5); color: var(--neon); }
+.btn-dir.active-rev { background: rgba(19,142,227,.12); border-color: rgba(19,142,227,.4); color: #6ac4f7; }
+
+.power-slider-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.power-slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--dim);
+  font-family: 'IBM Plex Mono', monospace;
+}
+input[type=range].power-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel3);
+  outline: none;
+  cursor: pointer;
+}
+input[type=range].power-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--green);
+  border: 2px solid var(--bg);
+  cursor: pointer;
+  transition: background .12s;
+}
+input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--neon); }
+
+.btn-estop {
+  font-family: 'Onest', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px;
+  border-radius: var(--r);
+  border: 2px solid var(--magenta);
+  background: var(--mag-dim);
+  color: #e07de3;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  width: 100%;
+  letter-spacing: .02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-estop:hover { background: rgba(205,44,208,.25); color: #f5b0f7; }
+
+/* Switch card */
+.switch-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.switch-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.switch-track {
+  position: relative;
+  height: 40px;
+  background: var(--panel2);
+  border-radius: var(--r);
+  border: 1px solid var(--border2);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.switch-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.switch-label.sw-straight { color: var(--neon); }
+.switch-label.sw-curve    { color: #6ac4f7; }
+
+.switch-throw-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.btn-throw {
+  font-family: 'Onest', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 10px 8px;
+  border-radius: var(--r);
+  border: 1px solid var(--border2);
+  background: var(--panel2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.btn-throw:hover { background: var(--panel3); color: var(--text); border-color: var(--dim); }
+.btn-throw.active-sw { background: rgba(0,171,73,.15); border-color: rgba(0,171,73,.5); color: var(--neon); }
 </style>
 </head>
 <body>
@@ -491,6 +713,89 @@ form.blk { display: block; }
         </button>
       </form>
       <span class="stack-strip-desc">Graceful restart — ~10s of downtime, no rebuild</span>
+    </div>
+  </div>
+
+  <!-- Train Control -->
+  <div>
+    <div class="section-label">Train Control</div>
+    <div class="train-grid">
+
+      <!-- Live state -->
+      <div class="train-state-card">
+        <div class="card-head" style="margin:-18px -18px 0;padding:10px 16px;border-bottom:1px solid var(--border);">
+          <span class="card-head-title">Live State</span>
+          <span class="badge" id="train-conn-badge">—</span>
+        </div>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px;">
+          <div class="state-row">
+            <span class="state-key">Direction</span>
+            <span id="train-dir-pill" class="pill pill-none">—</span>
+          </div>
+          <div class="state-row">
+            <span class="state-key">Power</span>
+            <div style="display:flex;align-items:center;gap:10px;flex:1;justify-content:flex-end;">
+              <div class="power-bar-wrap"><div class="power-bar-fill" id="train-power-bar" style="width:0%"></div></div>
+              <span class="state-val" id="train-power-val" style="min-width:32px;text-align:right;">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Motor controls -->
+      <div class="motor-card">
+        <div class="card-head" style="margin:-18px -18px 0;padding:10px 16px;border-bottom:1px solid var(--border);">
+          <span class="card-head-title">Motor</span>
+        </div>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px;">
+          <div class="motor-dir-btns">
+            <button class="btn-dir" id="btn-fwd" onclick="setMotor('forward')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              Forward
+            </button>
+            <button class="btn-dir" id="btn-rev" onclick="setMotor('reverse')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              Reverse
+            </button>
+          </div>
+          <div class="power-slider-wrap">
+            <div class="power-slider-labels">
+              <span>Power</span>
+              <span id="power-slider-label">25</span>
+            </div>
+            <input type="range" class="power-slider" id="power-slider" min="0" max="50" value="25"
+                   oninput="document.getElementById('power-slider-label').textContent=this.value">
+          </div>
+          <button class="btn-estop" onclick="eStop()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            E-STOP
+          </button>
+        </div>
+      </div>
+
+      <!-- Switch -->
+      <div class="switch-card">
+        <div class="card-head" style="margin:-18px -18px 0;padding:10px 16px;border-bottom:1px solid var(--border);">
+          <span class="card-head-title">Track Switch</span>
+          <span class="badge" id="switch-conn-badge">—</span>
+        </div>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px;">
+          <div class="switch-track">
+            <span class="switch-label" id="switch-pos-label">UNKNOWN</span>
+          </div>
+          <div class="switch-throw-btns">
+            <button class="btn-throw" id="btn-sw-straight" onclick="throwSwitch('forward')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              Straight
+            </button>
+            <button class="btn-throw" id="btn-sw-curve" onclick="throwSwitch('reverse')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12 Q12 5 19 12"/></svg>
+              Curve
+            </button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -665,6 +970,124 @@ form.blk { display: block; }
 
   poll();
   setInterval(poll, 5000);
+})();
+
+// Train + switch control
+(function () {
+  let _currentDir = null;
+  let _currentPower = 0;
+  let _switchPos = null;
+
+  function applyTrainState(d) {
+    if (!d || d.error) return;
+    _currentDir = d.direction || null;
+    _currentPower = d.power || 0;
+
+    const dirPill = document.getElementById('train-dir-pill');
+    if (d.direction === 'forward') {
+      dirPill.textContent = 'FORWARD';
+      dirPill.className = 'pill pill-fwd';
+    } else if (d.direction === 'reverse') {
+      dirPill.textContent = 'REVERSE';
+      dirPill.className = 'pill pill-rev';
+    } else {
+      dirPill.textContent = '—';
+      dirPill.className = 'pill pill-none';
+    }
+
+    const pct = Math.min((_currentPower / 50) * 100, 100);
+    document.getElementById('train-power-bar').style.width = pct + '%';
+    document.getElementById('train-power-val').textContent = _currentPower;
+
+    const connBadge = document.getElementById('train-conn-badge');
+    if (d.connected) {
+      connBadge.textContent = 'connected';
+      connBadge.className = 'badge';
+      connBadge.style.color = 'var(--neon)';
+    } else {
+      connBadge.textContent = 'sim';
+      connBadge.className = 'badge';
+      connBadge.style.color = '';
+    }
+
+    document.getElementById('btn-fwd').className =
+      'btn-dir' + (d.direction === 'forward' && d.power > 0 ? ' active-fwd' : '');
+    document.getElementById('btn-rev').className =
+      'btn-dir' + (d.direction === 'reverse' && d.power > 0 ? ' active-rev' : '');
+  }
+
+  function applySwitchState(d) {
+    if (!d || d.error) return;
+    _switchPos = d.position || 'unknown';
+
+    const lbl = document.getElementById('switch-pos-label');
+    const badge = document.getElementById('switch-conn-badge');
+
+    if (_switchPos === 'forward') {
+      lbl.textContent = 'STRAIGHT';
+      lbl.className = 'switch-label sw-straight';
+    } else if (_switchPos === 'reverse') {
+      lbl.textContent = 'CURVE';
+      lbl.className = 'switch-label sw-curve';
+    } else {
+      lbl.textContent = 'UNKNOWN';
+      lbl.className = 'switch-label';
+    }
+
+    if (d.online) {
+      badge.textContent = 'online';
+      badge.style.color = 'var(--neon)';
+    } else if (d.online === false) {
+      badge.textContent = 'offline';
+      badge.style.color = 'var(--yellow)';
+    } else {
+      badge.textContent = '—';
+      badge.style.color = '';
+    }
+
+    document.getElementById('btn-sw-straight').className =
+      'btn-throw' + (_switchPos === 'forward' ? ' active-sw' : '');
+    document.getElementById('btn-sw-curve').className =
+      'btn-throw' + (_switchPos === 'reverse' ? ' active-sw' : '');
+  }
+
+  function pollTrain() {
+    fetch('/api/train/state', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) applyTrainState(d); })
+      .catch(() => {});
+    fetch('/api/train/switch/state', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) applySwitchState(d); })
+      .catch(() => {});
+  }
+
+  window.setMotor = function (dir) {
+    const power = parseInt(document.getElementById('power-slider').value, 10);
+    fetch('/api/train/motor', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction: dir, power: power }),
+    }).then(() => pollTrain()).catch(() => {});
+  };
+
+  window.eStop = function () {
+    fetch('/api/train/stop', { method: 'POST', credentials: 'include' })
+      .then(() => pollTrain()).catch(() => {});
+  };
+
+  window.throwSwitch = function (dir) {
+    fetch('/api/train/switch/throw', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ direction: dir }),
+    }).then(() => { setTimeout(pollTrain, 1200); }).catch(() => {});
+  };
+
+  pollTrain();
+  setInterval(pollTrain, 3000);
 })();
 </script>
 

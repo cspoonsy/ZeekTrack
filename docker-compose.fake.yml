@@ -318,7 +318,9 @@ services:
   # The base image runs only the webserver + indexer. Ingesters are
   # separate containers that connect to :4023 — see `simple_relay` below.
   gravwell:
-    image: gravwell/gravwell:latest
+    image: choochoo-gravwell:dev
+    build:
+      context: ./gravwell
     container_name: choochoo-gravwell
     hostname: gravwell
     ports:
@@ -390,6 +392,9 @@ services:
       # Comma-separated profiles that were used to bring the stack up.
       # Used by rebuild/per-service restart so compose knows which services exist.
       COMPOSE_PROFILES: ${COMPOSE_PROFILES:-mqtt,sensor,gravwell}
+      # Which choochoo web container to proxy train/switch commands through.
+      # Use http://choochoo-web-mqtt:8000 when running the mqtt-only profile.
+      TRAIN_API_URL: ${TRAIN_API_URL:-http://choochoo-web-modbus:8000}
     profiles: [admin]
     restart: unless-stopped
     logging:
