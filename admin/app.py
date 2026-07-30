@@ -169,11 +169,17 @@ def api_stats(_user: str = Depends(require_auth)):
     }
 
 
+@app.get("/api/containers")
+def api_containers(_user: str = Depends(require_auth)):
+    return _running_containers()
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, _user: str = Depends(require_auth)):
     return templates.TemplateResponse(request, "index.html", {
         "containers": _running_containers(),
         "blocked_ips": _blocked_ips(),
+        "profiles": COMPOSE_PROFILES,
     })
 
 

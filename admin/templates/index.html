@@ -71,7 +71,8 @@ a { color: var(--blue); text-decoration: none; }
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .badge {
   font-family: 'IBM Plex Mono', monospace;
@@ -87,6 +88,40 @@ a { color: var(--blue); text-decoration: none; }
   color: var(--yellow);
   background: rgba(212,172,0,.1);
   border-color: rgba(212,172,0,.35);
+}
+.badge-profile {
+  color: var(--neon);
+  background: var(--green-dim);
+  border: 1px solid var(--green-bdr);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  border-radius: 99px;
+  padding: 3px 10px;
+  letter-spacing: .03em;
+}
+.badge-link {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--blue);
+  background: rgba(18,142,227,.1);
+  border: 1px solid rgba(18,142,227,.3);
+  border-radius: 99px;
+  padding: 3px 10px;
+  letter-spacing: .03em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.badge-link:hover {
+  background: rgba(18,142,227,.18);
+  border-color: rgba(18,142,227,.55);
+  color: #6ac4f7;
+}
+.topbar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border2);
+  margin: 0 4px;
 }
 
 /* ── Layout ─────────────────────────────────────────────── */
@@ -201,7 +236,7 @@ button, .btn {
 .btn-ghost:hover { background: var(--panel3); color: var(--text); border-color: var(--dim); }
 
 .btn-sm { font-size: 12px; padding: 5px 12px; }
-.btn-xs { font-size: 11px; padding: 3px 9px; font-weight: 500; }
+.btn-xs { font-size: 11px; padding: 3px 9px; font-weight: 500; min-height: 36px; }
 button:disabled, .btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
 
 form { display: contents; }
@@ -396,15 +431,62 @@ form.blk { display: block; }
   padding-top: 24px;
   margin-top: 8px;
 }
-.rebuild-zone {
-  background: rgba(205,44,208,.06);
-  border: 1px solid var(--mag-bdr);
+
+/* Locked state — shown by default */
+.rebuild-locked {
+  background: var(--panel2);
+  border: 1px solid var(--border);
   border-radius: var(--r);
   padding: 20px 24px;
   display: flex;
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
+}
+.rebuild-locked-info { flex: 1; min-width: 200px; }
+.rebuild-locked-info strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dim);
+  margin-bottom: 3px;
+}
+.rebuild-locked-info span { font-size: 12px; color: var(--border2); }
+.btn-unlock {
+  font-family: 'Onest', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: var(--r);
+  border: 1px solid var(--border2);
+  background: var(--panel3);
+  color: var(--dim);
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.btn-unlock:hover {
+  background: var(--panel2);
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+/* Unlocked / armed state — hidden by default */
+.rebuild-zone {
+  display: none;
+  background: rgba(205,44,208,.06);
+  border: 1px solid var(--mag-bdr);
+  border-radius: var(--r);
+  padding: 20px 24px;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.rebuild-zone.armed {
+  display: flex;
 }
 .rebuild-info { flex: 1; min-width: 200px; }
 .rebuild-info strong {
@@ -415,6 +497,12 @@ form.blk { display: block; }
   margin-bottom: 3px;
 }
 .rebuild-info span { font-size: 12px; color: var(--dim); }
+.rebuild-timer {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--yellow);
+  margin-top: 6px;
+}
 .btn-rebuild {
   font-family: 'Onest', sans-serif;
   font-size: 15px;
@@ -530,6 +618,7 @@ form.blk { display: block; }
   font-size: 13px;
   font-weight: 600;
   padding: 12px 8px;
+  min-height: 44px;
   border-radius: var(--r);
   border: 1px solid var(--border2);
   background: var(--panel2);
@@ -546,44 +635,40 @@ form.blk { display: block; }
 .btn-dir.active-fwd { background: rgba(0,171,73,.15); border-color: rgba(0,171,73,.5); color: var(--neon); }
 .btn-dir.active-rev { background: rgba(19,142,227,.12); border-color: rgba(19,142,227,.4); color: #6ac4f7; }
 
-.power-slider-wrap {
-  display: flex;
-  flex-direction: column;
+/* Stepped power buttons */
+.power-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
 }
-.power-slider-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: var(--dim);
+.btn-power {
   font-family: 'IBM Plex Mono', monospace;
-}
-input[type=range].power-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 100%;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--panel3);
-  outline: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 6px;
+  min-height: 44px;
+  border-radius: var(--r);
+  border: 1px solid var(--border2);
+  background: var(--panel2);
+  color: var(--muted);
   cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-input[type=range].power-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 18px; height: 18px;
-  border-radius: 50%;
-  background: var(--green);
-  border: 2px solid var(--bg);
-  cursor: pointer;
-  transition: background .12s;
+.btn-power:hover { background: var(--panel3); color: var(--text); border-color: var(--dim); }
+.btn-power.active-power {
+  background: rgba(0,171,73,.15);
+  border-color: rgba(0,171,73,.5);
+  color: var(--neon);
 }
-input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--neon); }
 
 .btn-estop {
   font-family: 'Onest', sans-serif;
-  font-size: 15px;
-  font-weight: 700;
-  padding: 14px;
+  font-size: 18px;
+  font-weight: 800;
+  padding: 20px 14px;
   border-radius: var(--r);
   border: 2px solid var(--magenta);
   background: var(--mag-dim);
@@ -591,13 +676,19 @@ input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--n
   cursor: pointer;
   transition: background .12s, border-color .12s, color .12s;
   width: 100%;
-  letter-spacing: .02em;
+  letter-spacing: .04em;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  animation: estop-pulse 2.8s ease-in-out infinite;
 }
-.btn-estop:hover { background: rgba(205,44,208,.25); color: #f5b0f7; }
+.btn-estop:hover {
+  background: rgba(205,44,208,.28);
+  border-color: #e04de4;
+  color: #f5b0f7;
+  animation-duration: 1.2s;
+}
 
 /* Switch card */
 .switch-card {
@@ -645,7 +736,8 @@ input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--n
   font-family: 'Onest', sans-serif;
   font-size: 12px;
   font-weight: 600;
-  padding: 10px 8px;
+  padding: 14px 12px;
+  min-height: 44px;
   border-radius: var(--r);
   border: 1px solid var(--border2);
   background: var(--panel2);
@@ -659,6 +751,48 @@ input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--n
 }
 .btn-throw:hover { background: var(--panel3); color: var(--text); border-color: var(--dim); }
 .btn-throw.active-sw { background: rgba(0,171,73,.15); border-color: rgba(0,171,73,.5); color: var(--neon); }
+
+/* ── E-STOP prominence ───────────────────────────────────── */
+@keyframes estop-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(205,44,208,.0), inset 0 0 0 0 rgba(205,44,208,.0); }
+  50%       { box-shadow: 0 0 14px 4px rgba(205,44,208,.3), 0 0 28px 8px rgba(205,44,208,.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-estop { animation: none !important; }
+}
+
+/* ── Toast notifications ─────────────────────────────────── */
+#toast-container {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  pointer-events: none;
+}
+.toast {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .03em;
+  padding: 8px 16px;
+  border-radius: 99px;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity .15s ease, transform .15s ease;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.toast.toast-show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.toast-motor  { background: rgba(0,171,73,.15);  border: 1px solid rgba(0,171,73,.4);  color: var(--neon); }
+.toast-estop  { background: rgba(205,44,208,.18); border: 1px solid rgba(205,44,208,.5); color: #f0a0f3; }
+.toast-switch { background: rgba(19,142,227,.15); border: 1px solid rgba(19,142,227,.4); color: #6ac4f7; }
 </style>
 </head>
 <body>
@@ -669,6 +803,14 @@ input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--n
   <div class="topbar-right">
     <span class="badge-warn badge">Keep off projector</span>
     <span class="badge">:9999</span>
+    {% if profiles %}
+    <span class="topbar-divider"></span>
+    {% for p in profiles %}
+    <span class="badge-profile">{{ p.strip() }}</span>
+    {% endfor %}
+    {% endif %}
+    <span class="topbar-divider"></span>
+    <a class="badge-link" href="http://192.168.1.201" target="_blank" rel="noopener">Gravwell &#8594;</a>
   </div>
 </header>
 
@@ -758,13 +900,10 @@ input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--n
               Reverse
             </button>
           </div>
-          <div class="power-slider-wrap">
-            <div class="power-slider-labels">
-              <span>Power</span>
-              <span id="power-slider-label">25</span>
-            </div>
-            <input type="range" class="power-slider" id="power-slider" min="0" max="50" value="25"
-                   oninput="document.getElementById('power-slider-label').textContent=this.value">
+          <div class="power-steps">
+            <button class="btn-power" id="btn-pwr-10" onclick="selectPower(10)">10</button>
+            <button class="btn-power active-power" id="btn-pwr-25" onclick="selectPower(25)">25</button>
+            <button class="btn-power" id="btn-pwr-50" onclick="selectPower(50)">50</button>
           </div>
           <button class="btn-estop" onclick="eStop()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
@@ -894,13 +1033,28 @@ input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--n
   <!-- Teardown + Rebuild — nuclear option at the bottom -->
   <div class="rebuild-footer">
     <div class="section-label">Last Resort</div>
-    <div class="rebuild-zone">
+
+    <!-- Step 1: locked state (default) -->
+    <div class="rebuild-locked" id="rebuild-locked">
+      <div class="rebuild-locked-info">
+        <strong>Teardown + Rebuild</strong>
+        <span>Locked. Click unlock to reveal the teardown control.</span>
+      </div>
+      <button class="btn-unlock" type="button" onclick="unlockTeardown()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Unlock Teardown
+      </button>
+    </div>
+
+    <!-- Step 2: armed/unlocked state (hidden by default) -->
+    <div class="rebuild-zone" id="rebuild-zone">
       <div class="rebuild-info">
         <strong>Teardown + Rebuild</strong>
-        <span>Stops all containers, removes them, rebuilds all images from scratch, and restarts the full stack. Takes 2–3 minutes. Use only if the stack is unrecoverable.</span>
+        <span>Stops all containers, removes them, rebuilds all images from scratch, and restarts the full stack. Takes 2-3 minutes. Use only if the stack is unrecoverable.</span>
+        <div class="rebuild-timer" id="rebuild-timer">Auto-locking in 30s</div>
       </div>
       <form class="blk" method="post" action="/stack/rebuild"
-            onsubmit="return confirm('TEARDOWN + REBUILD\n\nThis will take the entire lab offline for 2–3 minutes while all images are rebuilt from scratch.\n\nContinue?')">
+            onsubmit="return confirm('TEARDOWN + REBUILD\n\nThis will take the entire lab offline for 2-3 minutes while all images are rebuilt from scratch.\n\nContinue?')">
         <button class="btn-rebuild" type="submit">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
           Teardown + Rebuild
@@ -912,14 +1066,11 @@ input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--n
 </main>
 
 <script>
-// Stats polling — calls /api/stats every 5s with Basic auth header
-// Credentials are already in the browser session from the initial page load,
-// so we rebuild the Authorization header from the page's own origin auth.
-// If the browser cached it, great. If not, we prompt once.
+// Stats polling
 (function () {
   function fmt_bps(bps) {
-    if (bps >= 1_000_000) return (bps / 1_000_000).toFixed(1) + ' MB/s';
-    if (bps >= 1_000)     return (bps / 1_000).toFixed(1) + ' KB/s';
+    if (bps >= 1000000) return (bps / 1000000).toFixed(1) + ' MB/s';
+    if (bps >= 1000)    return (bps / 1000).toFixed(1) + ' KB/s';
     return bps + ' B/s';
   }
 
@@ -960,7 +1111,6 @@ input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--n
     }
   }
 
-  // Fetch using credentials the browser already holds for this origin
   function poll() {
     fetch('/api/stats', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
@@ -972,11 +1122,49 @@ input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--n
   setInterval(poll, 5000);
 })();
 
+// Teardown unlock toggle — two-step reveal with 30s auto-relock
+(function () {
+  var lockTimer = null;
+  var countdownInterval = null;
+  var LOCK_SECONDS = 30;
+
+  function lockTeardown() {
+    clearTimeout(lockTimer);
+    clearInterval(countdownInterval);
+    lockTimer = null;
+    countdownInterval = null;
+    document.getElementById('rebuild-locked').style.display = '';
+    document.getElementById('rebuild-zone').classList.remove('armed');
+  }
+
+  window.unlockTeardown = function () {
+    document.getElementById('rebuild-locked').style.display = 'none';
+    document.getElementById('rebuild-zone').classList.add('armed');
+
+    var remaining = LOCK_SECONDS;
+    var timerEl = document.getElementById('rebuild-timer');
+    timerEl.textContent = 'Auto-locking in ' + remaining + 's';
+
+    countdownInterval = setInterval(function () {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(countdownInterval);
+        lockTeardown();
+      } else {
+        timerEl.textContent = 'Auto-locking in ' + remaining + 's';
+      }
+    }, 1000);
+
+    lockTimer = setTimeout(lockTeardown, LOCK_SECONDS * 1000);
+  };
+})();
+
 // Train + switch control
 (function () {
   let _currentDir = null;
   let _currentPower = 0;
   let _switchPos = null;
+  let _selectedPower = 25;
 
   function applyTrainState(d) {
     if (!d || d.error) return;
@@ -1062,8 +1250,16 @@ input[type=range].power-slider::-webkit-slider-thumb:hover { background: var(--n
       .catch(() => {});
   }
 
+  window.selectPower = function (val) {
+    _selectedPower = val;
+    [10, 25, 50].forEach(function (v) {
+      const btn = document.getElementById('btn-pwr-' + v);
+      if (btn) btn.classList.toggle('active-power', v === val);
+    });
+  };
+
   window.setMotor = function (dir) {
-    const power = parseInt(document.getElementById('power-slider').value, 10);
+    const power = _selectedPower;
     fetch('/api/train/motor', {
       method: 'POST',
       credentials: 'include',
