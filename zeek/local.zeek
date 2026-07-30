@@ -41,6 +41,8 @@ redef Log::default_ext_func = log_ext_choochoo;
 # Modbus authorized masters — web-modbus container (172.19.0.4) is the only
 # legitimate source of Modbus writes. Anything else gets authorized=F in
 # modbus_writes.log, which fires the UnauthorizedWrite notice.
+@load modbus-detections
+@load mqtt-detections
 redef modbus_detect::authorized_masters += { 172.19.0.4 };
 
 # Local nets — anything outside these ranges is treated as external.
