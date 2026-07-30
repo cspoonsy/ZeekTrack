@@ -29,6 +29,7 @@ OVERRIDE="${SCRIPT_DIR}/../docker-compose.override.yml"
 [ -f "$OVERRIDE" ] && COMPOSE="$COMPOSE -f $OVERRIDE"
 DASHBOARDS_DIR="${SCRIPT_DIR}/../gravwell/dashboards"
 GRAVWELL_URL="${GRAVWELL_URL:-http://localhost:8080}"
+GRAVWELL_PASS="${GRAVWELL_PASS:-changeme}"
 
 # Include local Gravwell profile only when Gravwell runs on this host.
 # Set GRAVWELL_URL to a non-localhost address to skip local Gravwell containers.
@@ -48,7 +49,7 @@ case "$MODE" in
     echo "Starting MQTT (IoT) mode..."
     $COMPOSE --profile mqtt --profile attacker $GRAVWELL_PROFILE $SENSOR_PROFILE $ADMIN_PROFILE up --build -d
     echo "Waiting for mosquitto to be ready..."
-    until docker exec choochoo-mosquitto-fake mosquitto_sub -h localhost -t '#' -C 1 -W 1 &>/dev/null; do sleep 1; done
+    until docker exec choochoo-mosquitto-fake nc -z -w1 localhost 1883 &>/dev/null; do sleep 1; done
     ;;
   modbus)
     echo "Starting Modbus (Enterprise) mode..."
@@ -62,7 +63,7 @@ case "$MODE" in
     MODBUS_WEB_PORT=8001 \
       $COMPOSE --profile dual --profile mqtt --profile attacker $GRAVWELL_PROFILE $SENSOR_PROFILE $ADMIN_PROFILE up --build -d
     echo "Waiting for mosquitto to be ready..."
-    until docker exec choochoo-mosquitto-fake mosquitto_sub -h localhost -t '#' -C 1 -W 1 &>/dev/null; do sleep 1; done
+    until docker exec choochoo-mosquitto-fake nc -z -w1 localhost 1883 &>/dev/null; do sleep 1; done
     echo "Waiting for Modbus controller to be ready..."
     until docker exec choochoo-controller-modbus python3 -c \
       "import socket; s=socket.create_connection(('localhost',5020),timeout=1); s.close()" &>/dev/null; do sleep 1; done
@@ -91,7 +92,7 @@ provision_dashboards() {
 
   until jwt=$(curl -s -X POST "${GRAVWELL_URL}/api/login" \
       -H 'Content-Type: application/json' \
-      -d '{"User":"admin","Pass":"changeme"}' \
+      -d "{\"User\":\"admin\",\"Pass\":\"${GRAVWELL_PASS}\"}" \
       | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['JWT'])" 2>/dev/null) \
       && [ -n "$jwt" ]; do
     retries=$((retries - 1))
@@ -149,7 +150,7 @@ echo ""
 echo "Train UI (MQTT):   http://${HOST_IP}:8000"
 echo "Train UI (Modbus): http://${HOST_IP}:8001  (dual mode only)"
 echo "MQTT broker:       ${HOST_IP}:1883"
-echo "Gravwell:          ${GRAVWELL_URL}  (admin / changeme)"
+echo "Gravwell:          ${GRAVWELL_URL}  (admin / ${GRAVWELL_PASS})"
 echo "Admin panel:       http://${HOST_IP}:9999  (admin / ${ADMIN_PASSWORD:-choochoo-admin})"
 echo "Attacker:          docker exec -it choochoo-attacker bash"
 echo "Attacks:           docker exec choochoo-attacker run-attack --list"

@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 import paho.mqtt.client as mqtt
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -75,8 +75,11 @@ class MqttBridge:
         self._client.loop_stop()
         self._client.disconnect()
 
-    def publish(self, action: str, payload: dict) -> None:
+    def publish(self, action: str, payload: dict) -> bool:
+        if not self._client.is_connected():
+            return False
         self._client.publish(cmd_topic(self.train_id, action), json.dumps(payload))
+        return True
 
     def subscribe(self) -> asyncio.Queue[TrainState]:
         q: asyncio.Queue[TrainState] = asyncio.Queue(maxsize=16)
@@ -153,8 +156,11 @@ class SwitchBridge:
         self._client.loop_stop()
         self._client.disconnect()
 
-    def publish(self, action: str, payload: dict) -> None:
+    def publish(self, action: str, payload: dict) -> bool:
+        if not self._client.is_connected():
+            return False
         self._client.publish(switch_cmd_topic(self.switch_id, action), json.dumps(payload))
+        return True
 
     def view(self) -> dict:
         """Combined view for REST/WebSocket consumers.
@@ -193,15 +199,15 @@ class SwitchBridge:
         client.subscribe(discovery)
 
     def _on_message(self, _client, _userdata, msg: mqtt.MQTTMessage) -> None:
-        state_topic = switch_state_topic(self.switch_id)
-        discovery_topic = switch_discovery_topic(self.switch_id)
-        if msg.topic == state_topic:
+        state_t = switch_state_topic(self.switch_id)
+        discovery_t = switch_discovery_topic(self.switch_id)
+        if msg.topic == state_t:
             try:
                 self.state = SwitchState.model_validate_json(msg.payload)
             except ValidationError as e:
                 log.warning("bad switch state payload: %s", e)
                 return
-        elif msg.topic == discovery_topic:
+        elif msg.topic == discovery_t:
             try:
                 self._online = SwitchDiscovery.model_validate_json(msg.payload).online
             except ValidationError as e:
@@ -282,17 +288,20 @@ def create_app() -> FastAPI:
 
     @app.post("/api/motor")
     async def post_motor(cmd: MotorCommand) -> dict:
-        bridge.publish("motor", cmd.model_dump())
+        if not bridge.publish("motor", cmd.model_dump()):
+            raise HTTPException(503, "bridge not connected")
         return {"ok": True}
 
     @app.post("/api/stop")
     async def post_stop() -> dict:
-        bridge.publish("stop", StopCommand().model_dump())
+        if not bridge.publish("stop", StopCommand().model_dump()):
+            raise HTTPException(503, "bridge not connected")
         return {"ok": True}
 
     @app.post("/api/light")
     async def post_light(cmd: LightCommand) -> dict:
-        bridge.publish("light", cmd.model_dump())
+        if not bridge.publish("light", cmd.model_dump()):
+            raise HTTPException(503, "bridge not connected")
         return {"ok": True}
 
     @app.get("/api/state")
@@ -326,7 +335,8 @@ def create_app() -> FastAPI:
 
     @app.post("/api/switch/throw")
     async def post_switch_throw(cmd: ThrowCommand) -> dict:
-        switch_bridge.publish("throw", cmd.model_dump())
+        if not switch_bridge.publish("throw", cmd.model_dump()):
+            raise HTTPException(503, "bridge not connected")
         return {"ok": True}
 
     @app.websocket("/ws/switch/state")

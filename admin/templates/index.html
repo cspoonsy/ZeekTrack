@@ -1274,8 +1274,6 @@ form.blk { display: block; }
         timerEl.textContent = 'Auto-locking in ' + remaining + 's';
       }
     }, 1000);
-
-    lockTimer = setTimeout(lockTeardown, LOCK_SECONDS * 1000);
   };
 })();
 
@@ -1303,6 +1301,7 @@ form.blk { display: block; }
       dirPill.className = 'pill pill-none';
     }
 
+    // TODO: replace 50 with MAX_POWER once the template injects it as a JS variable
     const pct = Math.min((_currentPower / 50) * 100, 100);
     document.getElementById('train-power-bar').style.width = pct + '%';
     document.getElementById('train-power-val').textContent = _currentPower;

@@ -24,12 +24,8 @@ TRAIN="${TRAIN:-t1}"
 SWITCH="${SWITCH:-sw1}"
 IFACE="eth0"
 
-# Detect which control planes are available at startup
-MQTT_UP=false
-MODBUS_UP=false
-nc -z -w2 "$BROKER" 1883 2>/dev/null && MQTT_UP=true
-nc -z -w2 "$MODBUS_HOST" "$MODBUS_PORT" 2>/dev/null && MODBUS_UP=true
-echo "[noise] MQTT available: $MQTT_UP   Modbus available: $MODBUS_UP"
+mqtt_up()   { nc -z -w2 "$BROKER" 1883 2>/dev/null; }
+modbus_up() { nc -z -w2 "$MODBUS_HOST" "$MODBUS_PORT" 2>/dev/null; }
 
 PERSONAS=(50 51 52 53)
 
@@ -38,7 +34,7 @@ rnd_sleep() { sleep "$(python3 -c "import random; print(round(random.uniform($1,
 
 # Add virtual IPs
 for last in "${PERSONAS[@]}"; do
-  ip addr add "${SUBNET}.${last}/16" dev "$IFACE" 2>/dev/null || true
+  ip addr add "${SUBNET}.${last}/24" dev "$IFACE" 2>/dev/null || true
 done
 echo "[noise] IPs: ${PERSONAS[*]/#/${SUBNET}.}"
 echo "[noise] 4 personas running. pkill -f noise-attendee to stop."
@@ -128,7 +124,7 @@ persona_recon() {
     rnd_sleep 1 3
 
     # Subscribes to everything on MQTT — just to see, not to act
-    if $MQTT_UP; then
+    if mqtt_up; then
       mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "#" -C 15 -W 5 2>/dev/null || true
       rnd_sleep 2 4
 
@@ -153,7 +149,7 @@ persona_recon() {
     fi
 
     # Modbus register map read — full enumeration (if controller is up)
-    if $MODBUS_UP; then
+    if modbus_up; then
       /opt/attack/bin/python3 - <<PY 2>/dev/null || true
 import asyncio
 from pymodbus.client import AsyncModbusTcpClient
@@ -174,7 +170,7 @@ PY
     fi
 
     # Goes back and subscribes again — still just watching
-    if $MQTT_UP; then
+    if mqtt_up; then
       mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "#" -C 10 -W 5 2>/dev/null || true
     fi
 
@@ -266,7 +262,7 @@ persona_wrong_path() {
 
     # Tries Modbus but uses wrong unit ID and register ranges — also tries to
     # throw the switch via Modbus (completely wrong protocol for the switch)
-    if $MODBUS_UP; then
+    if modbus_up; then
       /opt/attack/bin/python3 - <<PY 2>/dev/null || true
 import asyncio
 from pymodbus.client import AsyncModbusTcpClient
@@ -290,7 +286,7 @@ PY
     fi
 
     # Tries switch throw commands to completely wrong MQTT topics
-    if $MQTT_UP; then
+    if mqtt_up; then
       for topic in \
         "switch/throw" \
         "train/switch" \
@@ -343,7 +339,7 @@ persona_success() {
     rnd_sleep 2 4
 
     # Step 2: Wildcard broker dump — discover all topics including switch tree
-    if $MQTT_UP; then
+    if mqtt_up; then
       mosquitto_sub -A "$IP" -h "$BROKER" -p 1883 -t "#" -C 5 -W 3 2>/dev/null || true
       rnd_sleep 1 2
 
@@ -392,7 +388,7 @@ persona_success() {
 
     # Step 10: Modbus train control — the ONLY correct path for the train motor
     # (MQTT motor commands are intentionally absent here — they no longer work)
-    if $MODBUS_UP; then
+    if modbus_up; then
       /opt/attack/bin/python3 - <<PY 2>/dev/null || true
 import asyncio
 from pymodbus.client import AsyncModbusTcpClient

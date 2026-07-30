@@ -21,6 +21,7 @@ import queue
 import subprocess
 import threading
 import time
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 import docker
@@ -60,7 +61,16 @@ _net_snapshot: dict = {}
 
 security = HTTPBasic()
 templates = Jinja2Templates(directory="templates")
-app = FastAPI(title="ChooChoo Admin", docs_url=None, redoc_url=None)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await _train_client.aclose()
+    await _switch_client.aclose()
+
+
+app = FastAPI(title="ChooChoo Admin", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 try:
     docker_client = docker.from_env()
@@ -219,7 +229,19 @@ def rebuild_container(container_name: str, _user: str = Depends(require_auth)):
     profile_flags = []
     for p in COMPOSE_PROFILES:
         profile_flags += ["--profile", p.strip()]
-    service_name = container_name.replace("choochoo-", "").replace("-fake", "")
+    # Explicit mapping avoids fragile string replacement silently producing wrong service names.
+    _container_to_service = {
+        "choochoo-mosquitto-fake":          "mosquitto",
+        "choochoo-switch-controller-mqtt":  "switch-controller-mqtt",
+        "choochoo-web-mqtt":                "web-mqtt",
+        "choochoo-controller-modbus":       "controller-modbus",
+        "choochoo-web-modbus":              "web-modbus",
+        "choochoo-zeek":                    "zeek",
+        "choochoo-vector":                  "vector",
+    }
+    service_name = _container_to_service[container_name]
+    # Intentionally fire-and-forget: the compose up can take several seconds to pull/start
+    # the image; we redirect immediately so the browser isn't left waiting.
     subprocess.Popen(
         ["docker", "compose", "-f", COMPOSE_FILE] + profile_flags + ["up", "-d", "--no-deps", service_name]
     )
