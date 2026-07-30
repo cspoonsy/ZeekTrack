@@ -794,64 +794,46 @@ form.blk { display: block; }
 .toast-estop  { background: rgba(205,44,208,.18); border: 1px solid rgba(205,44,208,.5); color: #f0a0f3; }
 .toast-switch { background: rgba(19,142,227,.15); border: 1px solid rgba(19,142,227,.4); color: #6ac4f7; }
 
-/* ── Debug log panes ─────────────────────────────────────── */
-.debug-section { margin-top: 4px; }
-.debug-toggle {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  user-select: none;
-  margin-bottom: 0;
-}
-.debug-toggle .section-label { margin-bottom: 0; }
-.debug-chevron {
-  font-size: 10px;
-  color: var(--dim);
-  transition: transform .2s ease;
-}
-.debug-chevron.open { transform: rotate(90deg); }
-.debug-body {
-  display: none;
-  margin-top: 10px;
-}
-.debug-body.open { display: block; }
-
-.log-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-@media (max-width: 720px) {
-  .log-grid { grid-template-columns: 1fr; }
-}
-
-.log-pane {
+/* ── Debug terminal ──────────────────────────────────────── */
+.debug-terminal {
   background: #161b20;
   border: 1px solid var(--border);
   border-radius: var(--r);
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
-.log-pane-head {
+.debug-tab-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 5px 10px;
   background: var(--panel2);
   border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
+  gap: 0;
+  overflow-x: auto;
 }
-.log-pane-title {
+.debug-tab {
+  font-family: 'IBM Plex Mono', monospace;
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: .07em;
-  text-transform: uppercase;
-  color: var(--muted);
+  font-weight: 500;
+  letter-spacing: .04em;
+  padding: 7px 14px;
+  color: var(--dim);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
+  transition: color .1s, background .1s;
+}
+.debug-tab:hover { color: var(--muted); background: var(--panel3); }
+.debug-tab.active { color: var(--text); background: #161b20; border-bottom: 2px solid var(--green); }
+.debug-tab-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  flex-shrink: 0;
 }
 .log-dot {
   width: 6px; height: 6px;
@@ -860,29 +842,44 @@ form.blk { display: block; }
   flex-shrink: 0;
 }
 .log-dot.live { background: var(--green); animation: ping 2.4s ease-out infinite; }
-.log-pane-actions { display: flex; gap: 4px; }
 .log-output {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 10px;
   line-height: 1.45;
   color: #a8b3bc;
   padding: 6px 10px;
-  height: 140px;
+  height: 130px;
   overflow-y: scroll;
   overflow-x: hidden;
   word-break: break-all;
-  flex: 1;
-  scroll-behavior: smooth;
+  display: none;
 }
+.log-output.active { display: block; }
 .log-output::-webkit-scrollbar { width: 3px; }
 .log-output::-webkit-scrollbar-track { background: transparent; }
-.log-output::-webkit-scrollbar-thumb { background: var(--green); border-radius: 2px; opacity: .6; }
-.log-line { margin: 0; padding: 0; border-bottom: none; }
+.log-output::-webkit-scrollbar-thumb { background: var(--green); border-radius: 2px; }
+.log-line { margin: 0; padding: 0; }
 .log-line .ts { color: var(--dim); margin-right: 5px; }
 .log-line.hl-write { color: #f0a0f3; }
 .log-line.hl-connect { color: var(--neon); }
 .log-line.hl-error { color: var(--yellow); }
 .log-empty { color: var(--dim); font-style: italic; }
+
+/* ── Debug section toggle ────────────────────────────────── */
+.debug-section { display: flex; flex-direction: column; gap: 8px; }
+.debug-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+}
+.debug-toggle:hover .section-label { color: var(--muted); }
+.debug-chevron { font-size: 9px; color: var(--dim); transition: transform .2s ease; line-height: 1; }
+.debug-chevron.open { transform: rotate(90deg); }
+.debug-body { display: none; }
+.debug-body.open { display: block; }
 </style>
 </head>
 <body>
@@ -1120,7 +1117,6 @@ form.blk { display: block; }
 
   </div>
 
-  <!-- Teardown + Rebuild — nuclear option at the bottom -->
   <!-- Debug log streams -->
   <div class="debug-section">
     <div class="debug-toggle" onclick="toggleDebug()">
@@ -1128,68 +1124,29 @@ form.blk { display: block; }
       <span class="section-label" style="margin-bottom:0">Debug Logs</span>
     </div>
     <div class="debug-body" id="debug-body">
-      <div class="log-grid">
-
-        <!-- Modbus log -->
-        <div class="log-pane">
-          <div class="log-pane-head">
-            <span class="log-pane-title">
-              <span class="log-dot" id="modbus-dot"></span>
-              Modbus Controller
-            </span>
-            <div class="log-pane-actions">
-              <button class="btn-ghost btn-xs" onclick="clearLog('modbus')">Clear</button>
-              <button class="btn-ghost btn-xs" id="modbus-toggle" onclick="toggleLog('modbus')">Start</button>
-            </div>
+      <div class="debug-terminal">
+        <div class="debug-tab-bar">
+          <div class="debug-tab active" id="tab-modbus" onclick="switchTab('modbus')">
+            <span class="log-dot" id="modbus-dot"></span>Modbus
           </div>
-          <div class="log-output" id="modbus-log"><span class="log-empty">— not streaming —</span></div>
-        </div>
-
-        <!-- MQTT log -->
-        <div class="log-pane">
-          <div class="log-pane-head">
-            <span class="log-pane-title">
-              <span class="log-dot" id="mqtt-dot"></span>
-              MQTT Broker
-            </span>
-            <div class="log-pane-actions">
-              <button class="btn-ghost btn-xs" onclick="clearLog('mqtt')">Clear</button>
-              <button class="btn-ghost btn-xs" id="mqtt-toggle" onclick="toggleLog('mqtt')">Start</button>
-            </div>
+          <div class="debug-tab" id="tab-mqtt" onclick="switchTab('mqtt')">
+            <span class="log-dot" id="mqtt-dot"></span>MQTT
           </div>
-          <div class="log-output" id="mqtt-log"><span class="log-empty">— not streaming —</span></div>
-        </div>
-
-        <!-- Web-modbus log -->
-        <div class="log-pane">
-          <div class="log-pane-head">
-            <span class="log-pane-title">
-              <span class="log-dot" id="web-dot"></span>
-              Web (Modbus)
-            </span>
-            <div class="log-pane-actions">
-              <button class="btn-ghost btn-xs" onclick="clearLog('web')">Clear</button>
-              <button class="btn-ghost btn-xs" id="web-toggle" onclick="toggleLog('web')">Start</button>
-            </div>
+          <div class="debug-tab" id="tab-web" onclick="switchTab('web')">
+            <span class="log-dot" id="web-dot"></span>Web
           </div>
-          <div class="log-output" id="web-log"><span class="log-empty">— not streaming —</span></div>
-        </div>
-
-        <!-- Zeek log -->
-        <div class="log-pane">
-          <div class="log-pane-head">
-            <span class="log-pane-title">
-              <span class="log-dot" id="zeek-dot"></span>
-              Zeek
-            </span>
-            <div class="log-pane-actions">
-              <button class="btn-ghost btn-xs" onclick="clearLog('zeek')">Clear</button>
-              <button class="btn-ghost btn-xs" id="zeek-toggle" onclick="toggleLog('zeek')">Start</button>
-            </div>
+          <div class="debug-tab" id="tab-zeek" onclick="switchTab('zeek')">
+            <span class="log-dot" id="zeek-dot"></span>Zeek
           </div>
-          <div class="log-output" id="zeek-log"><span class="log-empty">— not streaming —</span></div>
+          <div class="debug-tab-actions">
+            <button class="btn-ghost btn-xs" onclick="clearLog(_activeTab)">Clear</button>
+            <button class="btn-ghost btn-xs" id="log-toggle-btn" onclick="toggleLog(_activeTab)">Start</button>
+          </div>
         </div>
-
+        <div class="log-output active" id="modbus-log"><span class="log-empty">— not streaming —</span></div>
+        <div class="log-output" id="mqtt-log"><span class="log-empty">— not streaming —</span></div>
+        <div class="log-output" id="web-log"><span class="log-empty">— not streaming —</span></div>
+        <div class="log-output" id="zeek-log"><span class="log-empty">— not streaming —</span></div>
       </div>
     </div>
   </div>
@@ -1451,24 +1408,43 @@ form.blk { display: block; }
 
 // ── Debug log streaming ───────────────────────────────────────────────────────
 (function () {
-  const streams = {};   // source -> { controller: AbortController }
+  const streams = {};
+  var _activeTab = 'modbus';
+  window._activeTab = _activeTab;
 
-  // Highlight patterns
   const HIGHLIGHTS = [
     { re: /write|inject|FC\s*[56]|WRITE/i,   cls: 'hl-write'   },
     { re: /connect|subscribe|start/i,         cls: 'hl-connect' },
     { re: /error|fail|exception|warn/i,       cls: 'hl-error'   },
   ];
 
+  function updateToggleBtn() {
+    const btn = document.getElementById('log-toggle-btn');
+    if (btn) btn.textContent = streams[_activeTab] ? 'Stop' : 'Start';
+  }
+
+  window.switchTab = function (source) {
+    _activeTab = source;
+    window._activeTab = source;
+
+    // Update tab highlights
+    ['modbus','mqtt','web','zeek'].forEach(function (s) {
+      const tab = document.getElementById('tab-' + s);
+      const out = document.getElementById(s + '-log');
+      if (tab) tab.classList.toggle('active', s === source);
+      if (out) out.classList.toggle('active', s === source);
+    });
+
+    updateToggleBtn();
+  };
+
   function appendLine(source, raw) {
     const el = document.getElementById(source + '-log');
     if (!el) return;
 
-    // Strip placeholder
     const empty = el.querySelector('.log-empty');
     if (empty) empty.remove();
 
-    // Parse optional Docker timestamp prefix (2026-07-30T18:22:48.123456789Z )
     let ts = '', text = raw;
     const m = raw.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s+(.*)$/s);
     if (m) { ts = m[1].substring(11, 19); text = m[2]; }
@@ -1478,15 +1454,13 @@ form.blk { display: block; }
     for (const {re, cls} of HIGHLIGHTS) {
       if (re.test(text)) { line.classList.add(cls); break; }
     }
-    line.innerHTML = (ts ? `<span class="ts">${ts}</span>` : '') +
+    line.innerHTML = (ts ? '<span class="ts">' + ts + '</span>' : '') +
       text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
     el.appendChild(line);
 
-    // Keep max 500 lines
     while (el.children.length > 500) el.removeChild(el.firstChild);
 
-    // Auto-scroll if within 8px of bottom (stays pinned unless user scrolls up)
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 8) {
       el.scrollTop = el.scrollHeight;
     }
@@ -1498,9 +1472,8 @@ form.blk { display: block; }
     streams[source] = { controller: ac };
 
     const dot = document.getElementById(source + '-dot');
-    const btn = document.getElementById(source + '-toggle');
     if (dot) dot.classList.add('live');
-    if (btn) btn.textContent = 'Stop';
+    updateToggleBtn();
 
     try {
       const resp = await fetch('/api/logs/' + source, {
@@ -1530,9 +1503,8 @@ form.blk { display: block; }
     } finally {
       delete streams[source];
       const dot2 = document.getElementById(source + '-dot');
-      const btn2 = document.getElementById(source + '-toggle');
       if (dot2) dot2.classList.remove('live');
-      if (btn2) btn2.textContent = 'Start';
+      updateToggleBtn();
     }
   }
 
@@ -1542,9 +1514,8 @@ form.blk { display: block; }
       delete streams[source];
     }
     const dot = document.getElementById(source + '-dot');
-    const btn = document.getElementById(source + '-toggle');
     if (dot) dot.classList.remove('live');
-    if (btn) btn.textContent = 'Start';
+    updateToggleBtn();
   }
 
   window.toggleLog = function (source) {
@@ -1554,9 +1525,7 @@ form.blk { display: block; }
 
   window.clearLog = function (source) {
     const el = document.getElementById(source + '-log');
-    if (el) {
-      el.innerHTML = '<span class="log-empty">— cleared —</span>';
-    }
+    if (el) el.innerHTML = '<span class="log-empty">— cleared —</span>';
   };
 
   window.toggleDebug = function () {
