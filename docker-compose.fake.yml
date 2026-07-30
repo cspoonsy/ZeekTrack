@@ -395,8 +395,9 @@ services:
       # Which choochoo web container to proxy train/switch commands through.
       # Use http://choochoo-web-mqtt:8000 when running the mqtt-only profile.
       # host network mode means container names don't resolve — use localhost + mapped port.
-      # web-mqtt is :8000, web-modbus is :8001. Default to mqtt (virtual events).
-      TRAIN_API_URL: ${TRAIN_API_URL:-http://localhost:8000}
+      # Train (Modbus) is web-modbus on :8001; switch (MQTT) is web-mqtt on :8000.
+      TRAIN_API_URL: ${TRAIN_API_URL:-http://localhost:8001}
+      SWITCH_API_URL: ${SWITCH_API_URL:-http://localhost:8000}
     profiles: [admin]
     restart: unless-stopped
     logging:
