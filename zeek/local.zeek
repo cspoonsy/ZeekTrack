@@ -47,6 +47,14 @@ redef Log::default_ext_func = log_ext_choochoo;
 # modbus_writes.log, which fires the UnauthorizedWrite notice.
 redef modbus_detect::authorized_masters += { 172.19.0.4 };
 
+# Demo-tuned thresholds — make detections fire in a live lab session.
+redef modbus_detect::unexpected_unit_write_grace = 0sec;
+redef modbus_detect::read_sweep_threshold = 20;
+redef modbus_detect::write_escalation_grace = 5min;
+
+# MQTT: only web-mqtt (172.19.0.5) is an authorized publisher to train cmd topics.
+redef mqtt_detect::authorized_publishers += { [172.19.0.5] };
+
 # Local nets — anything outside these ranges is treated as external.
 # Covers the Docker bridge default (172.16/12) plus common LAN ranges so
 # real-hardware sessions work out of the box.

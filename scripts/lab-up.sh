@@ -60,7 +60,7 @@ case "$MODE" in
   dual)
     echo "Starting dual mode (MQTT + Modbus simultaneously)..."
     MODBUS_WEB_PORT=8001 \
-      $COMPOSE --profile dual --profile attacker $GRAVWELL_PROFILE $SENSOR_PROFILE $ADMIN_PROFILE up --build -d
+      $COMPOSE --profile dual --profile mqtt --profile attacker $GRAVWELL_PROFILE $SENSOR_PROFILE $ADMIN_PROFILE up --build -d
     echo "Waiting for mosquitto to be ready..."
     until docker exec choochoo-mosquitto-fake mosquitto_sub -h localhost -t '#' -C 1 -W 1 &>/dev/null; do sleep 1; done
     echo "Waiting for Modbus controller to be ready..."

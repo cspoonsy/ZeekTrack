@@ -15,6 +15,7 @@ Requires:
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import os
 import queue
 import subprocess
@@ -243,19 +244,20 @@ def stack_rebuild(_user: str = Depends(require_auth)):
     profile_flags = []
     for p in COMPOSE_PROFILES:
         profile_flags += ["--profile", p.strip()]
-    subprocess.Popen([
-        "bash", "-c",
-        f"docker compose -f {COMPOSE_FILE} {' '.join(profile_flags)} down --remove-orphans && "
-        f"docker compose -f {COMPOSE_FILE} {' '.join(profile_flags)} up -d --build"
-    ])
+    base = ["docker", "compose", "-f", COMPOSE_FILE] + profile_flags
+    down = subprocess.run(base + ["down", "--remove-orphans"])
+    if down.returncode == 0:
+        subprocess.Popen(base + ["up", "-d", "--build"])
     return RedirectResponse("/", status_code=303)
 
 
 @app.post("/block")
 def block_ip(ip: Annotated[str, Form()], _user: str = Depends(require_auth)):
     """Insert a DROP rule in DOCKER-USER before any RETURN rules."""
-    if not ip or "/" in ip:
-        raise HTTPException(400, "Provide a single host IP (no CIDR)")
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        raise HTTPException(400, "Provide a valid host IP address (no CIDR)")
     subprocess.run(
         ["iptables", "-I", "DOCKER-USER", "1", "-s", ip, "-j", "DROP"],
         check=True,
@@ -364,7 +366,8 @@ async def stream_logs(source: str, _user: str = Depends(require_auth)):
 
     async def generate():
         q: asyncio.Queue = asyncio.Queue()
-        loop = asyncio.get_event_loop()
+        stop = threading.Event()
+        loop = asyncio.get_running_loop()
 
         def _reader():
             try:
@@ -374,10 +377,14 @@ async def stream_logs(source: str, _user: str = Depends(require_auth)):
                         stream=True, demux=False,
                     )
                     for chunk in stream:
+                        if stop.is_set():
+                            break
                         if chunk:
                             loop.call_soon_threadsafe(q.put_nowait, chunk)
                 else:
                     for chunk in container.logs(stream=True, follow=True, tail=100, timestamps=True):
+                        if stop.is_set():
+                            break
                         data = chunk if isinstance(chunk, bytes) else chunk.encode()
                         loop.call_soon_threadsafe(q.put_nowait, data)
             except Exception:
@@ -387,10 +394,13 @@ async def stream_logs(source: str, _user: str = Depends(require_auth)):
 
         threading.Thread(target=_reader, daemon=True).start()
 
-        while True:
-            item = await q.get()
-            if item is None:
-                break
-            yield item
+        try:
+            while True:
+                item = await q.get()
+                if item is None:
+                    break
+                yield item
+        finally:
+            stop.set()
 
     return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")

@@ -335,7 +335,10 @@ def create_app() -> FastAPI:
         q = switch_bridge.subscribe()
         try:
             while True:
-                view = await q.get()
+                try:
+                    view = await asyncio.wait_for(q.get(), timeout=15.0)
+                except asyncio.TimeoutError:
+                    view = switch_bridge.view()
                 await ws.send_json(view)
         except WebSocketDisconnect:
             pass

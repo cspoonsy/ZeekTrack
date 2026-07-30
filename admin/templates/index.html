@@ -1406,6 +1406,52 @@ form.blk { display: block; }
   setInterval(pollTrain, 3000);
 })();
 
+// Container status polling
+(function () {
+  function applyContainerStatus(data) {
+    if (!Array.isArray(data)) return;
+    data.forEach(function (c) {
+      // Locate the row via the restart form action which embeds the container name
+      var form = document.querySelector('form[action="/restart/' + c.name + '"]');
+      if (!form) return;
+      var row = form.closest('tr');
+      if (!row) return;
+
+      // Update status dot class
+      var dot = row.querySelector('.dot');
+      if (dot) {
+        dot.className = 'dot dot-' + c.status;
+      }
+
+      // Update status text — only span inside .dot-cell
+      var dotCell = row.querySelector('.dot-cell');
+      if (dotCell) {
+        var statusSpan = dotCell.querySelector('span');
+        if (statusSpan) {
+          statusSpan.className = 'status-' + c.status;
+          statusSpan.textContent = c.status;
+        }
+      }
+
+      // Keep Restart button disabled when container is absent
+      var restartBtn = form.querySelector('button[type="submit"]');
+      if (restartBtn) {
+        restartBtn.disabled = (c.status === 'absent');
+      }
+    });
+  }
+
+  function poll() {
+    fetch('/api/containers', { credentials: 'include' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) applyContainerStatus(d); })
+      .catch(function () {});
+  }
+
+  poll();
+  setInterval(poll, 5000);
+})();
+
 // ── Debug log streaming ───────────────────────────────────────────────────────
 (function () {
   const streams = {};

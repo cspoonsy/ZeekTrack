@@ -41,7 +41,7 @@ const _modbus_violation_weirds: set[string] = {
 event conn_weird(name: string, c: connection, addl: string, source: string)
 	{
 	# Only care about Modbus connections and relevant weird names.
-	if ( c$id$resp_p != 502/tcp && c$id$orig_p != 502/tcp )
+	if ( c$id$resp_p !in Modbus::ports && c$id$orig_p !in Modbus::ports )
 		return;
 	if ( name !in _modbus_violation_weirds )
 		return;

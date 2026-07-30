@@ -75,9 +75,20 @@ class ModbusBridge:
         asyncio.set_event_loop(self._worker_loop)
         self._stop_event = asyncio.Event()
         try:
-            self._worker_loop.run_until_complete(self._main())
+            self._worker_loop.run_until_complete(self._main_with_retry())
         finally:
             self._worker_loop.close()
+
+    async def _main_with_retry(self) -> None:
+        delay = 1.0
+        while not self._stop_event.is_set():
+            try:
+                await self._main()
+                break
+            except Exception:
+                log.warning("modbus bridge connect failed, retrying in %.1fs", delay)
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 30.0)
 
     async def _main(self) -> None:
         self._client = AsyncModbusTcpClient(self.host, port=self.port)

