@@ -42,9 +42,10 @@ sinks:
     type: socket
     inputs: [zeek]
     mode: tcp
-    # Ship to Gravwell's simple_relay ingester container, which forwards
-    # to the indexer over :4023 using the shared Ingest-Secret.
-    address: 192.168.1.201:7777
+    # Ship to Gravwell's simple_relay ingester. Set GRAVWELL_INGEST_ADDR in
+    # the host environment or .env to override for different deployments.
+    # Default: 192.168.1.201:7777 (home lab / Proxmox CT 201).
+    address: "${GRAVWELL_INGEST_ADDR:-192.168.1.201:7777}"
     encoding:
       codec: text
     framing:

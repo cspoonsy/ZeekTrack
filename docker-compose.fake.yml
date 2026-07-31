@@ -72,8 +72,8 @@ services:
     container_name: choochoo-switch-controller-mqtt
     command: ["-v", "switch-controller"]
     environment:
-      CHOOCHOO_BROKER: mosquitto
-      CHOOCHOO_BROKER_PORT: "1883"
+      CHOOCHOO_BROKER: ${MQTT_BROKER_HOST:-mosquitto}
+      CHOOCHOO_BROKER_PORT: ${MQTT_BROKER_PORT:-1883}
       CHOOCHOO_SWITCH_ID: sw1
       CHOOCHOO_SWITCH_KIND: fake
     depends_on:
@@ -99,8 +99,8 @@ services:
     environment:
       CHOOCHOO_PROTOCOL: mqtt
       CHOOCHOO_TRAIN_ID: t1
-      CHOOCHOO_BROKER: mosquitto
-      CHOOCHOO_BROKER_PORT: "1883"
+      CHOOCHOO_BROKER: ${MQTT_BROKER_HOST:-mosquitto}
+      CHOOCHOO_BROKER_PORT: ${MQTT_BROKER_PORT:-1883}
     depends_on:
       - mosquitto
     networks: [choochoo0]
@@ -128,8 +128,8 @@ services:
       # Outstation also mediates the track switch (M10). Points its
       # MQTT client at the switch broker; only takes effect when
       # --profile mqtt is also active.
-      CHOOCHOO_SWITCH_BROKER: mosquitto
-      CHOOCHOO_SWITCH_BROKER_PORT: "1883"
+      CHOOCHOO_SWITCH_BROKER: ${MQTT_BROKER_HOST:-mosquitto}
+      CHOOCHOO_SWITCH_BROKER_PORT: ${MQTT_BROKER_PORT:-1883}
       CHOOCHOO_SWITCH_ID: sw1
     ports:
       - "5020:5020"
@@ -154,12 +154,12 @@ services:
     environment:
       CHOOCHOO_PROTOCOL: modbus
       CHOOCHOO_TRAIN_ID: t1
-      CHOOCHOO_BROKER: controller
-      CHOOCHOO_MODBUS_PORT: "5020"
+      CHOOCHOO_BROKER: ${MODBUS_CONTROLLER_HOST:-controller}
+      CHOOCHOO_MODBUS_PORT: ${MODBUS_CONTROLLER_PORT:-5020}
       # The switch is MQTT-only; point its bridge at the broker regardless
       # of the train protocol. Only used when --profile mqtt is also active.
-      CHOOCHOO_SWITCH_BROKER: mosquitto
-      CHOOCHOO_SWITCH_BROKER_PORT: "1883"
+      CHOOCHOO_SWITCH_BROKER: ${MQTT_BROKER_HOST:-mosquitto}
+      CHOOCHOO_SWITCH_BROKER_PORT: ${MQTT_BROKER_PORT:-1883}
       CHOOCHOO_SWITCH_ID: sw1
     depends_on:
       - controller-modbus
@@ -250,7 +250,7 @@ services:
       # The simulator picks whichever dashboard host is up. With the mqtt
       # profile this is web-mqtt; with modbus, override via .env or compose
       # `up` env (`CHOOCHOO_DASHBOARD=http://web-modbus:8000`).
-      CHOOCHOO_DASHBOARD: ${CHOOCHOO_DASHBOARD:-http://web-mqtt:8000}
+      CHOOCHOO_DASHBOARD: ${CHOOCHOO_DASHBOARD:-http://${WEB_MQTT_HOST:-web-mqtt}:8000}
       CHOOCHOO_INTRANET: http://intranet
       CHOOCHOO_FILESHARE_HOST: fileshare
       CHOOCHOO_FILESHARE_NAME: section7
@@ -283,7 +283,16 @@ services:
     security_opt: [apparmor:unconfined]
     volumes:
       - zeek-logs:/logs
-    command: ["/usr/local/zeek/bin/zeek", "-i", "br-choochoo0", "-C", "local"]
+    environment:
+      # NIC to sniff. br-choochoo0 = Docker bridge (single-host default).
+      # Override to eth0 or the SPAN NIC name for physical multi-Pi deployments.
+      ZEEK_IFACE: ${ZEEK_IFACE:-br-choochoo0}
+      # IP of the legitimate Modbus master (web-modbus). Writes from other IPs
+      # get authorized=F. Leave unset if running without Modbus.
+      MODBUS_MASTER_IP: ${MODBUS_MASTER_IP:-}
+      # IP of the legitimate MQTT publisher (web-mqtt). Publishes from other IPs
+      # fire UnauthorizedPublish. Leave unset if running without MQTT.
+      MQTT_PUBLISHER_IP: ${MQTT_PUBLISHER_IP:-}
     profiles: [sensor]
     restart: unless-stopped
 

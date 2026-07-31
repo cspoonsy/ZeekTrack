@@ -19,11 +19,19 @@ COPY cluster_relay_lib  /usr/local/zeek/share/zeek/site/cluster_relay_lib
 COPY modbus-detections  /usr/local/zeek/share/zeek/site/modbus-detections
 COPY mqtt-detections    /usr/local/zeek/share/zeek/site/mqtt-detections
 
+# Entrypoint generates a deployment.zeek with site-specific IP redefs from
+# env vars (MODBUS_MASTER_IP, MQTT_PUBLISHER_IP, ZEEK_IFACE), then execs
+# Zeek. This makes the image usable on both Docker single-host (bridge IPs)
+# and physical multi-Pi deployments (real LAN IPs) without rebuilding.
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # WORKDIR creates /logs if absent — no RUN step needed (avoids AppArmor
 # issues inside unprivileged LXC).
 WORKDIR /logs
 
-# -i br-choochoo0  sniff the named Docker bridge (network_mode: host).
-# -C               skip bad-checksum warnings (common under Docker / QEMU).
-# local            load /usr/local/zeek/share/zeek/site/local.zeek (our policy).
-CMD ["/usr/local/zeek/bin/zeek", "-i", "br-choochoo0", "-C", "local"]
+# ZEEK_IFACE defaults to br-choochoo0 (Docker bridge, single-host mode).
+# Override to eth0 or the SPAN NIC name for physical multi-Pi deployments.
+ENV ZEEK_IFACE=br-choochoo0
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
