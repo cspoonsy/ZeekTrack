@@ -91,6 +91,7 @@ git clone <repo-url> choochoo && cd choochoo
 │   ├── config-hardened/             # TLS + auth + ACL config
 │   ├── auth/                        # generated passwords, gitignored
 │   └── certs/                       # generated CA + server cert, gitignored
+├── .env.example                         # deployment variable reference — copy to .env on each Pi
 ├── deploy/                          # systemd unit template for the Pi
 ├── scripts/
 │   ├── pi-setup.sh                  # one-shot Pi installer
@@ -200,6 +201,24 @@ Noise-simulator (`user` service):
 | `CHOOCHOO_FILESHARE_HOST` | `fileshare`                     | SMB server hostname                           |
 | `CHOOCHOO_FILESHARE_NAME` | `section7`                      | Share name                                    |
 
+Deployment / topology (set in `.env` on each Pi for multi-Pi deployments):
+
+| Variable                  | Default                   | Set on Pi running…       | Meaning                                                        |
+|---------------------------|---------------------------|--------------------------|----------------------------------------------------------------|
+| `MQTT_BROKER_HOST`        | `mosquitto`               | web-mqtt, web-modbus, switch-controller | Hostname/IP of the MQTT broker             |
+| `MQTT_BROKER_PORT`        | `1883`                    | same as above            | MQTT broker port                                               |
+| `MODBUS_CONTROLLER_HOST`  | `controller`              | web-modbus               | Hostname/IP of the Modbus outstation                           |
+| `MODBUS_CONTROLLER_PORT`  | `5020`                    | web-modbus               | Modbus/TCP port on the outstation                              |
+| `ZEEK_IFACE`              | `br-choochoo0`            | sensor (Zeek + Vector)   | NIC Zeek sniffs. Override to `eth0` for SPAN/physical NIC      |
+| `MODBUS_MASTER_IP`        | *(unset)*                 | sensor (Zeek + Vector)   | LAN IP of web-modbus — writes from other IPs get `authorized=F` |
+| `MQTT_PUBLISHER_IP`       | *(unset)*                 | sensor (Zeek + Vector)   | LAN IP of web-mqtt — publishes from other IPs fire `UnauthorizedPublish` |
+| `GRAVWELL_INGEST_ADDR`    | `192.168.1.201:7777`      | sensor (Zeek + Vector)   | Gravwell simple_relay address                                  |
+| `MODBUS_WEB_PORT`         | `8000`                    | host running web-modbus  | Host port for the Modbus web UI. Set to `8001` if web-mqtt is also on this host |
+| `ADMIN_USER`              | `admin`                   | admin panel              | Admin panel username                                           |
+| `ADMIN_PASSWORD`          | `choochoo-admin`          | admin panel              | Admin panel password — **change before any public event**      |
+| `GRAVWELL_URL`            | `http://localhost:8080`   | host running lab-up.sh   | Gravwell URL for dashboard provisioning                        |
+| `GRAVWELL_PASS`           | `changeme`                | host running lab-up.sh   | Gravwell admin password for provisioning API calls             |
+
 ### Ports at a glance
 
 | Port | Where           | Protocol       | Reachable from                        |
@@ -281,11 +300,12 @@ docker exec -it choochoo-zeek sh -c 'tail -F /logs/conn.log'
 docker exec -it choochoo-zeek sh -c 'tail -F /logs/modbus.log'
 ```
 
-Bridge-network caveat: on the default Docker bridge, `eth0` only sees
-broadcast + the sensor's own traffic, not east-west between siblings.
-For a full defender view of container-to-container traffic, deploy on a
-host with a SPAN/mirror port and run the sensor with
-`network_mode: host` pointed at the mirror interface.
+**Bridge-network capture:** on the default Docker bridge, Zeek sniffs
+`br-choochoo0` and sees all inter-container traffic on that interface.
+If your kernel doesn't route bridged frames through the capture hook
+(common on ARM/Raspbian), override `ZEEK_IFACE` to point at a physical
+NIC receiving SPAN traffic from a managed switch instead — see
+[Physical multi-Pi deployment](#physical-multi-pi-deployment) below.
 
 To swap Gravwell for a different SIEM later (or dual-ship), edit the
 `sinks:` block in [`vector/vector.yaml`](vector/vector.yaml). To load
@@ -418,6 +438,123 @@ the host.
 Trainer answer key (host-side, never inside the container):
 - `attacker/SOLUTIONS.md` — suggested progression with concrete payloads
 - `VULNERABILITIES.md` — full vulnerability catalog with Zeek detection hooks
+
+## Physical multi-Pi deployment
+
+For events where Docker bridge capture doesn't work reliably (ARM/Raspbian
+kernels), or when you want a physically realistic multi-node OT topology,
+split the services across multiple Pis connected to a managed switch.
+
+The key rule: **services that communicate directly must be on different Pis.**
+Traffic between Pis crosses physical Ethernet and is visible to Zeek via a
+SPAN port. Traffic between containers on the same Pi stays on the Docker
+bridge and is invisible to SPAN.
+
+### Minimum separation for complete capture
+
+| Must be on different Pis          | Invisible traffic if co-located              |
+|-----------------------------------|----------------------------------------------|
+| `web-modbus` and `controller-modbus` | All Modbus TCP — the primary detection path |
+| `web-mqtt` and `mosquitto`        | All MQTT train commands and state            |
+
+Everything else can be co-located without affecting the primary capture paths.
+
+### Suggested 5-Pi layout (MikroTik default subnet 192.168.88.0/24)
+
+| Pi  | IP              | Services (profiles)                      |
+|-----|-----------------|------------------------------------------|
+| Pi-1 | 192.168.88.11  | mosquitto (`mqtt`)                       |
+| Pi-2 | 192.168.88.12  | web-mqtt, switch-controller (`mqtt`)     |
+| Pi-3 | 192.168.88.13  | controller-modbus (`modbus`)             |
+| Pi-4 | 192.168.88.14  | web-modbus (`modbus`)                    |
+| Pi-5 | 192.168.88.15  | Zeek + Vector (`sensor`) — SPAN NIC      |
+
+Gravwell runs on a separate host (or existing box) and receives logs from
+Pi-5's Vector over TCP.
+
+### Setup steps
+
+**1. Configure the MikroTik SPAN port**
+
+In RouterOS, mirror all switch traffic to Pi-5's port:
+```
+/interface ethernet switch port
+set [find name=ether5] mirror-source=yes mirror-target=ether5
+```
+Or use the traffic sniffer for software-based mirroring to a remote host:
+```
+/tool sniffer set streaming-enabled=yes streaming-server=192.168.88.15
+```
+Confirm Pi-5 is receiving mirrored frames: `tcpdump -i eth0 -c 10`
+
+**2. Copy `.env.example` to `.env` on each Pi**
+
+```sh
+cp .env.example .env
+$EDITOR .env
+```
+
+Each Pi only needs the variables relevant to its services. Examples:
+
+*Pi-2 (web-mqtt + switch-controller):*
+```sh
+MQTT_BROKER_HOST=192.168.88.11
+MQTT_BROKER_PORT=1883
+```
+
+*Pi-4 (web-modbus):*
+```sh
+MODBUS_CONTROLLER_HOST=192.168.88.13
+MODBUS_CONTROLLER_PORT=5020
+MQTT_BROKER_HOST=192.168.88.11     # switch MQTT still needed in dual mode
+MODBUS_WEB_PORT=8000
+```
+
+*Pi-5 (Zeek + Vector — SPAN tap):*
+```sh
+ZEEK_IFACE=eth0                    # NIC receiving SPAN traffic — confirm with: ip link
+MODBUS_MASTER_IP=192.168.88.14     # web-modbus Pi — legitimate Modbus master
+MQTT_PUBLISHER_IP=192.168.88.12    # web-mqtt Pi — legitimate MQTT publisher
+GRAVWELL_INGEST_ADDR=192.168.88.20:7777
+```
+
+Leave `MODBUS_MASTER_IP` and `MQTT_PUBLISHER_IP` unset during initial
+setup if you don't know the IPs yet — Zeek will still capture and log
+everything, just without the authorized/unauthorized classification.
+
+**3. Start each Pi's services**
+
+```sh
+# Pi-1:
+docker compose -f docker-compose.fake.yml --profile mqtt up -d
+
+# Pi-2:
+docker compose -f docker-compose.fake.yml --profile mqtt up -d
+
+# Pi-3:
+docker compose -f docker-compose.fake.yml --profile modbus up -d
+
+# Pi-4 (note MODBUS_WEB_PORT already set in .env):
+docker compose -f docker-compose.fake.yml --profile modbus up -d
+
+# Pi-5:
+docker compose -f docker-compose.fake.yml --profile sensor up --build -d
+```
+
+**4. Verify capture**
+
+```sh
+# On Pi-5 — should show Modbus and MQTT frames between Pis:
+tcpdump -i eth0 -c 10 'port 5020 or port 1883'
+
+# Tail Zeek logs directly:
+docker exec choochoo-zeek sh -c 'tail -F /logs/modbus.log'
+docker exec choochoo-zeek sh -c 'tail -F /logs/mqtt_publish.log'
+```
+
+See [`.env.example`](.env.example) for a full variable reference and
+[`docs/capture-architecture-proposal.md`](docs/capture-architecture-proposal.md)
+for a detailed comparison of deployment options.
 
 ## Quick start — host, no hardware (legacy path)
 
