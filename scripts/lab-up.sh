@@ -142,6 +142,26 @@ PYEOF
   done
   rm -f "$existing_json"
   echo "  $imported dashboard(s) imported."
+
+  # Apply UI theme preferences to the admin user so the black theme and
+  # dismissed nag banners survive across fresh Gravwell instances.
+  # The Data field is base64-encoded JSON: interfaceTheme=black, chartTheme=default,
+  # system.dismiss=["ai"] suppresses the AI assistant banner.
+  # Apply the black UI theme and dismiss nag banners on every lab-up so fresh
+  # Gravwell instances always start with the correct appearance.
+  # Data is base64({"system":{"welcome":5.9,"dismiss":["ai"]},"interfaceTheme":"black","chartTheme":"default"})
+  local prefs_b64="eyJzeXN0ZW0iOiB7IndlbGNvbWUiOiA1LjksICJkaXNtaXNzIjogWyJhaSJdfSwgImludGVyZmFjZVRoZW1lIjogImJsYWNrIiwgImNoYXJ0VGhlbWUiOiAiZGVmYXVsdCJ9"
+  local prefs_result
+  prefs_result=$(curl -s -X PUT \
+    -H "Authorization: Bearer $jwt" \
+    -H "Content-Type: application/json" \
+    "${GRAVWELL_URL}/api/users/1/preferences" \
+    -d "[{\"Name\":\"prefs\",\"Data\":\"${prefs_b64}\"}]")
+  if echo "$prefs_result" | python3 -c "import sys,json; d=json.load(sys.stdin); exit(0 if isinstance(d,list) else 1)" 2>/dev/null; then
+    echo "  ✓ UI theme (black)"
+  else
+    echo "  ✗ theme preferences (error: ${prefs_result:-empty response})"
+  fi
 }
 provision_dashboards
 
