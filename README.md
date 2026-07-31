@@ -242,20 +242,38 @@ service UUID.
 
 ## Quick start — fully containerized, no hardware
 
+For a demo event, always use **dual mode**. Both MQTT and Modbus run
+simultaneously — attendees don't know which protocol is active, discovery
+is part of the exercise, and Zeek captures both protocol families so all
+five Gravwell dashboards have data.
+
 ```sh
-# Build + start in one shot. Add --profile attacker / --profile noise as needed.
-docker compose -f docker-compose.fake.yml --profile mqtt   up --build -d
-docker compose -f docker-compose.fake.yml --profile modbus up --build -d
-
-# http://localhost:8000
-
-docker compose -f docker-compose.fake.yml --profile mqtt   down
+./scripts/lab-up.sh dual
 ```
 
-Subsequent `up -d` runs reuse the cached images; pass `--build` again only
-when you've changed a Dockerfile or its build context.
+This builds images, starts all services, waits for readiness, provisions
+the Gravwell dashboards, and sets the UI theme. Run it once; re-running
+is safe and re-provisions dashboards on top of existing data.
 
-The two profiles share the same image; only the topology and env vars differ.
+If Gravwell runs on a separate host (recommended), point `lab-up.sh` at it
+via `.env` in the repo root before running:
+
+```
+GRAVWELL_URL=http://<gravwell-host>
+GRAVWELL_PASS=<admin-password>
+```
+
+Use single-protocol modes only when debugging or demoing one protocol
+in isolation:
+
+```sh
+./scripts/lab-up.sh mqtt      # MQTT only  → http://localhost:8000
+./scripts/lab-up.sh modbus    # Modbus only → http://localhost:8001
+./scripts/lab-up.sh down      # Tear everything down
+```
+
+Subsequent `up` runs reuse cached images; `lab-up.sh` passes `--build`
+automatically so image changes are always picked up.
 
 ### Adding background traffic (recommended for any demo)
 
