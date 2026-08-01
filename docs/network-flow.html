@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ChooChoo — Physical Network Flow</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #171d26;
+    --panel-2: #1e2530;
+    --border: #2a3441;
+    --text: #e6edf3;
+    --dim: #8b98a5;
+    --accent: #6ee7b7;
+    --attacker: #f87171;
+    --operator: #fbbf24;
+    --web: #60a5fa;
+    --controller: #a78bfa;
+    --sensor: #34d399;
+    --ble: #f472b6;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  }
+  .page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 32px 40px 48px;
+  }
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--dim); font-size: 13px; }
+  h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--dim);
+    font-weight: 600;
+    margin: 32px 0 12px;
+  }
+
+  .diagram-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    overflow-x: auto;
+  }
+  pre {
+    margin: 0;
+    font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--text);
+    white-space: pre;
+  }
+
+  /* Inline color helpers used inside <pre> */
+  .c-attacker { color: var(--attacker); }
+  .c-web      { color: var(--web); }
+  .c-ctrl     { color: var(--controller); }
+  .c-sensor   { color: var(--sensor); }
+  .c-oper     { color: var(--operator); }
+  .c-ble      { color: var(--ble); }
+  .c-dim      { color: var(--dim); }
+  .c-accent   { color: var(--accent); }
+  .c-bold     { font-weight: 700; }
+
+  /* Flow table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    margin-top: 4px;
+  }
+  th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--panel);
+    color: var(--dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+  }
+  td.num { font-weight: 600; color: var(--accent); font-family: "SF Mono", Menlo, monospace; width: 40px; }
+  td.route { font-family: "SF Mono", Menlo, monospace; font-size: 11.5px; color: var(--text); white-space: nowrap; }
+  td.proto { font-family: "SF Mono", Menlo, monospace; font-size: 11.5px; }
+  td.zeek { font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: var(--dim); }
+  .invisible { color: var(--attacker) !important; font-style: italic; }
+  tr.attacker-row td { background: rgba(248, 113, 113, 0.06); }
+  tr.invisible-row td { background: rgba(248, 113, 113, 0.03); }
+
+  /* Callouts */
+  .callouts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 12px;
+  }
+  .callout {
+    background: var(--panel);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 14px 16px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .callout.warn { border-left-color: var(--attacker); }
+  .callout.note { border-left-color: var(--ble); }
+  .callout h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+  }
+  .callout.warn h3 { color: var(--attacker); }
+  .callout.note h3 { color: var(--ble); }
+  code {
+    background: var(--panel-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div>
+      <h1>ChooChoo — Physical Network Flow</h1>
+      <div class="sub">Attacker · Web-UI Pi · Controller Pi · Sensor · via managed L2 switch with SPAN</div>
+    </div>
+    <div class="sub"><code>docker-compose.real.yml</code></div>
+  </header>
+
+  <div class="diagram-box">
+<pre>
+                                    ┌─────────────────────────────────────────┐
+                                    │           MANAGED L2 SWITCH             │
+                                    │        (physical, with SPAN port)       │
+                                    └──┬──────┬────────┬───────┬───────┬──────┘
+                                       │      │        │       │       │
+                                       │      │        │       │       │ <span class="c-sensor">(mirror out — RX only)</span>
+                                       │      │        │       │       ▼
+                                       │      │        │       │   <span class="c-sensor">┌────────────────────────────┐</span>
+                                       │      │        │       │   <span class="c-sensor">│ SENSOR BOX  (bare-metal)   │</span>
+                                       │      │        │       │   <span class="c-sensor">│ ┌────────────────────────┐ │</span>
+                                       │      │        │       │   <span class="c-sensor">│ │  Zeek / Corelight      │ │</span>
+                                       │      │        │       │   <span class="c-sensor">│ │  (passive, promisc.)   │ │</span>
+                                       │      │        │       │   <span class="c-sensor">│ └────────┬───────────────┘ │</span>
+                                       │      │        │       │   <span class="c-sensor">│          │ logs            │</span>
+                                       │      │        │       │   <span class="c-sensor">│          ▼                 │</span>
+                                       │      │        │       │   <span class="c-sensor">│ ┌────────────────────────┐ │</span>
+                                       │      │        │       │   <span class="c-sensor">│ │  Gravwell   :8080      │ │</span>
+                                       │      │        │       │   <span class="c-sensor">│ └────────────────────────┘ │</span>
+                                       │      │        │       │   <span class="c-sensor">└────────────────────────────┘</span>
+                                       │      │        │       │
+       ┌───────────────────────────────┘      │        │       └────────────────┐
+       │                                      │        │                        │
+       ▼                                      ▼        ▼                        ▼
+<span class="c-attacker">┌────────────────────┐</span>        <span class="c-web">┌─────────────────────────────────┐</span>     <span class="c-ctrl">┌─────────────────────────┐</span>
+<span class="c-attacker">│  ATTACKER LAPTOP   │</span>        <span class="c-web">│      WEB-UI Pi                  │</span>     <span class="c-ctrl">│      CONTROLLER Pi      │</span>
+<span class="c-attacker">│  (bare-metal)      │</span>        <span class="c-web">│     (Docker Compose)            │</span>     <span class="c-ctrl">│      (bare-metal)       │</span>
+<span class="c-attacker">│                    │</span>        <span class="c-web">│                                 │</span>     <span class="c-ctrl">│                         │</span>
+<span class="c-attacker">│  • nmap            │</span>        <span class="c-web">│  ┌───────────────────────────┐  │</span>     <span class="c-ctrl">│  systemd units:         │</span>
+<span class="c-attacker">│  • tcpdump         │</span>        <span class="c-web">│  │ mosquitto        :1883    │  │</span>     <span class="c-ctrl">│   • choochoo-           │</span>
+<span class="c-attacker">│  • mbpoll          │</span>        <span class="c-web">│  │  (container)              │  │</span>     <span class="c-ctrl">│       controller        │</span>
+<span class="c-attacker">│  • mosquitto_pub   │</span>        <span class="c-web">│  └───────────┬───────────────┘  │</span>     <span class="c-ctrl">│   • choochoo-switch-    │</span>
+<span class="c-attacker">│  • mosquitto_sub   │</span>        <span class="c-web">│              │ MQTT             │</span>     <span class="c-ctrl">│       controller        │</span>
+<span class="c-attacker">│  • python          │</span>        <span class="c-web">│              ▼                  │</span>     <span class="c-ctrl">│                         │</span>
+<span class="c-attacker">│                    │</span>        <span class="c-web">│  ┌───────────────────────────┐  │</span>     <span class="c-ctrl">│  Modbus outstation      │</span>
+<span class="c-attacker">└─────────┬──────────┘</span>        <span class="c-web">│  │ web-modbus       :8000    │  │</span>     <span class="c-ctrl">│    on :5020             │</span>
+          │                   <span class="c-web">│  │  (container, FastAPI)     │  │</span>     <span class="c-ctrl">│                         │</span>
+          │                   <span class="c-web">│  │  ├─ Modbus master ────────┼──┼─────┼─▶ (train setpoints)     │</span>
+          │                   <span class="c-web">│  │  ├─ MQTT client (switch) ─┼──┼──┐  │                         │</span>
+          │                   <span class="c-web">│  │  ├─ HTTP /api/*  :8000    │  │</span>  <span class="c-web">│</span>  <span class="c-ctrl">│  MQTT client (M10) ─┐   │</span>
+          │                   <span class="c-web">│  │  └─ WS /ws/*    :8000     │  │</span>  <span class="c-web">│</span>  <span class="c-ctrl">│                     │   │</span>
+          │                   <span class="c-web">│  └───────────────────────────┘  │</span>  <span class="c-web">│</span>  <span class="c-ctrl">│                     │   │</span>
+          │                   <span class="c-web">│                    ▲            │</span>  <span class="c-web">│</span>  <span class="c-ctrl">└─────────────────────┼───┘</span>
+          │                   <span class="c-web">└────────────────────┼────────────┘</span>  <span class="c-web">│</span>                        │
+          │                                        │               <span class="c-web">│</span>                        │
+          │       <span class="c-attacker">Modbus/TCP :5020 (train + M10 switch)</span>   │               <span class="c-web">│</span>                        │
+          ├────────────────────────────────────────┼───────────────┼────────────────────────┼──▶
+          │                                        │               <span class="c-web">│</span>                        │
+          │       <span class="c-attacker">MQTT :1883 (direct switch pub/sub, V-series)</span>            │                        │
+          └───────────────────────────────────────▶┤               <span class="c-web">│</span>                        │
+                                                   │               <span class="c-web">│</span>                        │
+                                    <span class="c-oper">HTTP+WS :8000</span>  │               <span class="c-web">│</span>                        │
+                                   <span class="c-oper">(operator only)</span> │               <span class="c-web">│</span>                        │
+                                                   │               <span class="c-web">│</span>                        │
+                                          <span class="c-oper">┌────────┴──────┐</span>        <span class="c-web">│</span>                        │
+                                          <span class="c-oper">│   OPERATOR    │</span>        <span class="c-web">│</span>                        │
+                                          <span class="c-oper">│   BROWSER     │</span>        <span class="c-web">│</span>                        │
+                                          <span class="c-oper">│  (trainers    │</span>        <span class="c-web">│</span>                        │
+                                          <span class="c-oper">│   only)       │</span>        <span class="c-web">│</span>                        │
+                                          <span class="c-oper">└───────────────┘</span>        <span class="c-web">│</span>                        │
+                                                                   <span class="c-web">│</span>                        │
+                            <span class="c-web">MQTT :1883 (switch cmd) ◀──────────────┘</span>                        │
+                                                                                            │
+                            <span class="c-dim">Modbus poll (web → controller) ◀───────────────────────────────┘</span>
+                                                                                            │
+                                                                                            │  <span class="c-ble">BLE (radio, off-network)</span>
+                                                                                            <span class="c-ble">├──────────────────┐</span>
+                                                                                            <span class="c-ble">│                  │</span>
+                                                                                            <span class="c-ble">▼                  ▼</span>
+                                                                                       <span class="c-ble">┌─────────┐        ┌─────────┐</span>
+                                                                                       <span class="c-ble">│ BuWizz3 │        │  Cube   │</span>
+                                                                                       <span class="c-ble">│  hub    │        │ "Tenka" │</span>
+                                                                                       <span class="c-ble">└────┬────┘        └────┬────┘</span>
+                                                                                            │                  │
+                                                                                            ▼                  ▼
+                                                                                       ┌─────────┐        ┌─────────┐
+                                                                                       │  TRAIN  │        │ SWITCH  │
+                                                                                       └─────────┘        └─────────┘
+</pre>
+  </div>
+
+  <h2>Flows on the wire (captured by the SPAN)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Source → Destination</th>
+        <th>Protocol</th>
+        <th>Purpose</th>
+        <th>Zeek log</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="num">1</td>
+        <td class="route">web-modbus → controller-pi:5020</td>
+        <td class="proto">Modbus/TCP</td>
+        <td>Continuous poll to render UI (~every 500 ms)</td>
+        <td class="zeek">modbus.log · conn.log</td>
+      </tr>
+      <tr>
+        <td class="num">2</td>
+        <td class="route">controller-pi:5020 → web-modbus</td>
+        <td class="proto">Modbus/TCP</td>
+        <td>Poll responses — register values</td>
+        <td class="zeek">modbus.log</td>
+      </tr>
+      <tr class="attacker-row">
+        <td class="num">3a</td>
+        <td class="route">attacker → controller-pi:5020</td>
+        <td class="proto">Modbus/TCP</td>
+        <td>Drive the train directly (HR writes) · throw the switch via M10 (coil 1/2 writes)</td>
+        <td class="zeek">modbus.log</td>
+      </tr>
+      <tr class="attacker-row">
+        <td class="num">3b</td>
+        <td class="route">attacker → web-pi:1883</td>
+        <td class="proto">MQTT</td>
+        <td>Direct pub/sub on <code>choochoo/#</code> — snoop schema, publish <code>switch/sw1/cmd/throw</code> without going through the outstation (V-series)</td>
+        <td class="zeek">mqtt_connect · mqtt_publish · mqtt_subscribe</td>
+      </tr>
+      <tr>
+        <td class="num">4</td>
+        <td class="route">controller-pi → web-pi:1883</td>
+        <td class="proto">MQTT</td>
+        <td>Switch controller pub/sub · M10 SwitchMirror · retained discovery / LWT</td>
+        <td class="zeek">mqtt_connect · mqtt_publish · mqtt_subscribe</td>
+      </tr>
+      <tr class="invisible-row">
+        <td class="num">5</td>
+        <td class="route">web-modbus ↔ mosquitto (same host)</td>
+        <td class="proto">MQTT</td>
+        <td>Switch panel state — both containers on same Docker host</td>
+        <td class="zeek invisible">not on the wire · inside Docker bridge</td>
+      </tr>
+      <tr>
+        <td class="num">6a</td>
+        <td class="route">operator → web-pi:8000</td>
+        <td class="proto">HTTP</td>
+        <td>Page load, static assets, REST commands (<code>/api/motor</code>, <code>/api/switch/throw</code>)</td>
+        <td class="zeek">http.log</td>
+      </tr>
+      <tr>
+        <td class="num">6b</td>
+        <td class="route">operator → web-pi:8000</td>
+        <td class="proto">HTTP → WebSocket</td>
+        <td>101 upgrade, then long-lived JSON state (throttle, switch position, direction, liveness)</td>
+        <td class="zeek">http.log (101 only) · conn.log (long duration)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Three things to notice</h2>
+  <div class="callouts">
+
+    <div class="callout warn">
+      <h3>Flow 5 is invisible to Zeek</h3>
+      Both containers share the Docker host, so this MQTT chatter never crosses a physical NIC — it stays inside Docker's bridge. Flow 4 (the cross-device MQTT) is the interesting stuff and <em>is</em> on the wire.
+    </div>
+
+    <div class="callout">
+      <h3>WebSocket masquerades as HTTP</h3>
+      Flow 6b's handshake is <code>GET /ws/state</code> + <code>101 Switching Protocols</code> — lands in <code>http.log</code>. Everything after is opaque frames on a long-lived TCP session. Detection rules that only read <code>http.log</code> will miss operator activity entirely.
+    </div>
+
+    <div class="callout note">
+      <h3>BLE is off-network by design</h3>
+      BuWizz and Circuit Cube speak BLE directly to the controller Pi. Zeek can't see radio, so anything past the Pi is invisible. Every teachable attack surface lives on the LAN side (Modbus + MQTT).
+    </div>
+
+  </div>
+
+</div>
+</body>
+</html>
