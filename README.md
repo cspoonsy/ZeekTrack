@@ -499,6 +499,14 @@ Privacy & Security → Bluetooth.
 Two BLE devices, two bare-metal processes. Neither is in
 `docker-compose.real.yml` on purpose.
 
+> The examples in this section assume everything runs on **one host**
+> (the workstation running Docker and owning both BLE radios). If the
+> BLE-owning controller lives on a **different machine** than the web /
+> broker stack — e.g., web on your Mac, controllers on a Pi — jump to
+> ["Split-host deployment"](#split-host-deployment-event-topology-on-the-range-lan)
+> below. Every `localhost` and `host.docker.internal` in this section
+> needs to become a real LAN IP, and the startup order matters.
+
 ### Train — Modbus mode (Enterprise / OT)
 
 ```sh
@@ -648,6 +656,37 @@ If step 3 fails on Linux and `host.docker.internal` doesn't resolve,
 `extra_hosts: "host.docker.internal:host-gateway"`; if you still see
 resolution failures, replace it with the Mac / Linux LAN IP.
 
+**Split-host: `Not connected[AsyncModbusTcpClient host.docker.internal:5020]`.**
+The web container is trying `host.docker.internal` (Docker's gateway,
+resolves to something like `192.168.65.254`) because the base
+`docker-compose.real.yml` assumes the outstation is on the same host.
+When the outstation is on a different machine, add a compose override
+that points `CHOOCHOO_BROKER` at the controller's real LAN IP:
+
+```yaml
+# docker-compose.override.yml alongside docker-compose.real.yml
+services:
+  web-modbus:
+    environment:
+      CHOOCHOO_BROKER: 10.220.251.62      # <-- controller host IP
+      CHOOCHOO_MODBUS_PORT: "5020"
+```
+
+Then `docker compose ... up -d --force-recreate web-modbus`. See the
+["Split-host deployment"](#split-host-deployment-event-topology-on-the-range-lan)
+section for the full topology.
+
+**Controller crashes with `ConnectionRefusedError [Errno 111]` on the
+MQTT step.** The bare-metal controller was told the broker is somewhere
+it isn't. Two common versions:
+
+- `CHOOCHOO_BROKER=localhost` when mosquitto lives on a different host
+  (the split-host case). Use the LAN IP of whichever host runs the
+  broker (usually the web-UI Pi).
+- The controller started before mosquitto did. Bring the web-UI stack
+  up first, verify with `nc -zv <web-ui-pi> 1883` from the controller
+  host, then start the controllers.
+
 **`ModuleNotFoundError: No module named 'bleak'`** when starting the
 controller — you forgot `uv sync --extra pi`.
 
@@ -792,6 +831,101 @@ The web UI is at `http://<pi>:8000`. Zeek's Modbus and MQTT analyzers
 both light up under the event configuration: `modbus.log` covers M1–M10
 (train HRs/coils + M10 switch throw), `mqtt_publish.log` covers S1–S3
 (switch commands + retained-topic recon + LWT-driven liveness).
+
+### Split-host deployment (event topology on the range LAN)
+
+The event range runs the web-UI stack on one Pi and the BLE-owning
+controllers on a second Pi, connected via a managed switch. When the
+pieces live on different boxes, three things bite you if you copy-paste
+the workstation examples above:
+
+1. **`localhost` no longer works.** The workstation examples above and
+   in the "Quick start — real hardware" section all assume the broker,
+   outstation, and controllers share a host. On a split range, every
+   `CHOOCHOO_BROKER=localhost` and `CHOOCHOO_SWITCH_BROKER=localhost`
+   must be replaced with the LAN IP of whichever host runs mosquitto
+   (the web-UI Pi). Failure mode is `ConnectionRefusedError: [Errno
+   111] Connection refused` seconds after the controller comes up.
+2. **`host.docker.internal` no longer works either.** The base
+   `docker-compose.real.yml` points `web-modbus` at
+   `host.docker.internal:5020` — correct when the outstation is on the
+   same box as the web container, wrong when the outstation is on
+   another Pi. Override `CHOOCHOO_BROKER` on `web-modbus` to the
+   controller Pi's LAN IP (see below).
+3. **Startup order matters.** Bring the web-UI Pi (mosquitto in
+   particular) up before the controller Pi. Every controller opens an
+   outbound TCP connection to the broker at startup; if the broker
+   isn't there yet, the process crashes rather than retrying. The web
+   UI's Modbus master is more forgiving — it retries — so bringing the
+   controller Pi up before the web-UI Pi is fine, it just means a few
+   seconds of "not connected" log lines from `web-modbus` until the
+   controller comes online.
+
+**Startup order:**
+
+1. **Web-UI Pi** — brings up `mosquitto` (:1883) and `web-modbus`
+   (:8000). Under `docker-compose.real.yml` with a compose override
+   (`docker-compose.override.yml` alongside) that redirects
+   `web-modbus`'s Modbus target from `host.docker.internal` to the
+   controller Pi's LAN IP:
+
+   ```yaml
+   # docker-compose.override.yml on the web-UI Pi
+   services:
+     web-modbus:
+       environment:
+         CHOOCHOO_BROKER: 10.220.251.62    # <-- controller Pi IP
+         CHOOCHOO_MODBUS_PORT: "5020"
+   ```
+
+   ```sh
+   docker compose -f docker-compose.real.yml \
+       --profile modbus --profile mqtt up --build -d
+   ```
+
+2. **Controller Pi** — the two systemd units. Each `.env` file points
+   `CHOOCHOO_BROKER` (and `CHOOCHOO_SWITCH_BROKER` for the train
+   outstation) at the web-UI Pi's LAN IP:
+
+   ```sh
+   # /etc/choochoo/controller.env — train outstation (Modbus)
+   CHOOCHOO_PROTOCOL=modbus
+   CHOOCHOO_TRAIN=buwizz
+   CHOOCHOO_BUWIZZ_NAME=BuWizz3
+   CHOOCHOO_SWITCH_BROKER=10.220.251.30   # <-- web-UI Pi IP (for M10 mirror)
+
+   # /etc/choochoo/switch-controller.env — switch (MQTT)
+   CHOOCHOO_SWITCH_KIND=circuit_cube
+   CHOOCHOO_CUBE_NAME=TenkaBCFD           # unique per Cube; substring match
+   CHOOCHOO_CUBE_PORT=a
+   CHOOCHOO_SWITCH_ID=sw1
+   CHOOCHOO_BROKER=10.220.251.30          # <-- web-UI Pi IP
+
+   sudo systemctl enable --now choochoo-controller choochoo-switch-controller
+   ```
+
+**Before starting each controller, verify reachability first** — this
+takes one command and prevents the confusing crash-on-startup:
+
+```sh
+# On the controller Pi, before starting either service:
+nc -zv <web-ui-pi-ip> 1883       # mosquitto reachable?
+
+# On the web-UI Pi, once the controller Pi is up:
+nc -zv <controller-pi-ip> 5020   # outstation reachable?
+```
+
+If either says `Connection refused`, the target service isn't listening
+yet — bring it up before proceeding. If either hangs, it's a firewall
+(check `sudo ufw status` on both Pis).
+
+**Multiple Cubes with unique names.** `CHOOCHOO_CUBE_NAME` is a
+substring match against the advertised BLE name (`circuit_cube.py`).
+When two Cubes are in range they advertise as `Tenka<HHHH>` where
+`<HHHH>` is a unique 4-hex-char suffix. Using the bare prefix `Tenka`
+would non-deterministically pick one. Always set the full unique name
+in each switch controller's `.env` so `sw1` and `sw2` bind to the
+intended Cube.
 
 `CHOOCHOO_HUB_NAME` defaults to `Smart Hub` (the factory default). If the
 hub was renamed via the Lego Powered Up app, set this to the exact
