@@ -47,6 +47,14 @@ _CONNECT_TIMEOUT_S = 15.0
 _RECONNECT_INITIAL_S = 5.0
 _RECONNECT_MAX_S = 30.0
 
+# Idle GATT keepalive. The Cube has no vendor-side watchdog, but idle
+# BLE links get dropped by the peripheral's LL supervision timer — seen
+# on BlueZ where the connection interval is longer than macOS/CoreBluetooth
+# negotiates. Sending a real GATT frame every few seconds resets it. The
+# stop frame is a safe no-op when the motor is already stopped, so it
+# doubles as the keepalive payload.
+_KEEPALIVE_INTERVAL_S = 3.0
+
 
 def encode_frame(direction: Direction | None, magnitude: int, port: str) -> bytes:
     """Return the 5-byte ASCII frame. `direction=None` means stop."""
@@ -77,6 +85,10 @@ class CircuitCubeSwitch(SwitchClient):
         # power cycle, but the TI SoC family behind the Cube keeps it.
         self._cached_address: str | None = None
         self._reconnect_task: asyncio.Task | None = None
+        self._keepalive_task: asyncio.Task | None = None
+        # Non-zero while a burst is running. Keepalive skips its write when
+        # this is >0 so we don't stop-frame a live motor mid-throw.
+        self._burst_in_flight = 0
 
     # --- SwitchClient API --------------------------------------------------
 
@@ -154,13 +166,35 @@ class CircuitCubeSwitch(SwitchClient):
         self._client = client
         self._char = char
         self._cached_address = address_for_log
-        # No watchdog on the Cube, so we can't probe the link the way
-        # BuWizz does. Mark the link alive optimistically; the next real
-        # write (or a failed write) toggles it correctly.
+        # No vendor watchdog on the Cube. Mark the link alive optimistically;
+        # the keepalive loop (below) is what actually proves it every few
+        # seconds by writing a real GATT frame.
         self._link_alive = True
         loop = asyncio.get_running_loop()
+        self._keepalive_task = loop.create_task(self._keepalive_loop())
         if self._reconnect_task is None:
             self._reconnect_task = loop.create_task(self._reconnect_loop())
+
+    async def _keepalive_loop(self) -> None:
+        """Periodically re-send the stop frame so BlueZ / the Cube don't
+        drop the link on the LL supervision timer. Suspended while a burst
+        is running so we can't stop the motor mid-throw."""
+        stop_frame = encode_frame(None, 0, self._port)
+        try:
+            while True:
+                await asyncio.sleep(_KEEPALIVE_INTERVAL_S)
+                if self._burst_in_flight > 0:
+                    continue
+                if not self._link_alive:
+                    return
+                try:
+                    await self._raw_write(stop_frame)
+                except Exception:
+                    # _raw_write flipped _link_alive; the reconnect loop
+                    # takes over from here.
+                    return
+        except asyncio.CancelledError:
+            raise
 
     async def _reconnect_loop(self) -> None:
         """Watches `_link_alive`. When it's False, tear down the dead
@@ -184,6 +218,11 @@ class CircuitCubeSwitch(SwitchClient):
                         )
                     self._client = None
                     self._char = None
+                if self._keepalive_task is not None:
+                    self._keepalive_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await self._keepalive_task
+                    self._keepalive_task = None
 
                 log.info(
                     "[%s] BLE link dead; reconnect attempt in %.1fs",
@@ -213,6 +252,11 @@ class CircuitCubeSwitch(SwitchClient):
             with contextlib.suppress(asyncio.CancelledError):
                 await self._reconnect_task
             self._reconnect_task = None
+        if self._keepalive_task is not None:
+            self._keepalive_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._keepalive_task
+            self._keepalive_task = None
         if self._client is None:
             return
         # Best-effort stop before dropping BLE.
@@ -229,6 +273,7 @@ class CircuitCubeSwitch(SwitchClient):
         start_frame = encode_frame(direction, SWITCH_POWER, self._port)
         stop_frame = encode_frame(None, 0, self._port)
         stop_failed: Exception | None = None
+        self._burst_in_flight += 1
         try:
             await self._raw_write(start_frame)
             await asyncio.sleep(duration_ms / 1000)
@@ -238,6 +283,7 @@ class CircuitCubeSwitch(SwitchClient):
             except Exception as e:
                 log.warning("[%s] stop write failed: %s", self.switch_id, e)
                 stop_failed = e
+            self._burst_in_flight -= 1
         if stop_failed is not None:
             raise stop_failed
 
