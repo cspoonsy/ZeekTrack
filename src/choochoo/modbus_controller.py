@@ -199,10 +199,12 @@ class _TrainBlock(ModbusSequentialDataBlock):
             addr = address + offset
             if addr == CO_ESTOP and bool(val):
                 log.info("ESTOP via coil write")
+                self._flash_indicator()
                 self._train.stop()
                 # Latch back to 0 — emergency stop is edge-triggered.
                 super().setValues(CO_ESTOP, [False])
             elif addr == CO_SWITCH_TO_STRAIGHT and bool(val):
+                self._flash_indicator()
                 if self._switch_mirror is not None:
                     log.info("switch throw to straight via coil write")
                     self._switch_mirror.throw(UI_STRAIGHT_WIRE_DIRECTION)
@@ -210,6 +212,7 @@ class _TrainBlock(ModbusSequentialDataBlock):
                 # when no mirror is wired (the write is still valid Modbus).
                 super().setValues(CO_SWITCH_TO_STRAIGHT, [False])
             elif addr == CO_SWITCH_TO_CURVE and bool(val):
+                self._flash_indicator()
                 if self._switch_mirror is not None:
                     log.info("switch throw to curve via coil write")
                     self._switch_mirror.throw(UI_CURVE_WIRE_DIRECTION)
@@ -219,14 +222,23 @@ class _TrainBlock(ModbusSequentialDataBlock):
         for offset, raw in enumerate(values):
             addr = address + offset
             if addr == HR_POWER:
+                self._flash_indicator()
                 self._apply_power(decode_signed_power(int(raw)))
             elif addr == HR_LIGHT:
+                self._flash_indicator()
                 self._apply_light(int(raw))
             elif addr == HR_CMD_COUNTER:
-                # Operator-incremented edge marker. No side effect; useful
-                # to a master that wants to make every command unique on
-                # the wire (defeats coalescing in some monitors).
-                pass
+                # Operator-incremented edge marker. No side effect on
+                # the train, but the write itself is a real command —
+                # flash so the indicator still fires.
+                self._flash_indicator()
+
+    def _flash_indicator(self) -> None:
+        """Cosmetic — never propagate errors from the LED path."""
+        try:
+            self._train.flash_indicator()
+        except Exception:
+            log.debug("flash_indicator failed", exc_info=True)
 
     def _apply_power(self, signed: int) -> None:
         signed = max(-100, min(100, signed))
