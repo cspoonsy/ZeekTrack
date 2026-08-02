@@ -152,7 +152,21 @@ class CircuitCubeSwitch(SwitchClient):
             device_or_addr = device
             address_for_log = device.address
 
-        client = BleakClient(device_or_addr, timeout=_CONNECT_TIMEOUT_S)
+        # disconnected_callback fires the moment BlueZ notices the peer is
+        # gone — much faster and more reliable than waiting for the next
+        # keepalive write to fail. On BlueZ we've seen BleakClient.is_connected
+        # return True after the link is already dead; the callback is the
+        # authoritative signal, so we flip _link_alive here and let the
+        # reconnect loop take over.
+        def _on_disconnected(_client) -> None:
+            log.info("[%s] BLE disconnected_callback fired", self.switch_id)
+            self._link_alive = False
+
+        client = BleakClient(
+            device_or_addr,
+            timeout=_CONNECT_TIMEOUT_S,
+            disconnected_callback=_on_disconnected,
+        )
         await client.connect()
         log.info("[%s] connected to Cube at %s", self.switch_id, address_for_log)
 
@@ -178,7 +192,9 @@ class CircuitCubeSwitch(SwitchClient):
     async def _keepalive_loop(self) -> None:
         """Periodically re-send the stop frame so BlueZ / the Cube don't
         drop the link on the LL supervision timer. Suspended while a burst
-        is running so we can't stop the motor mid-throw."""
+        is running so we can't stop the motor mid-throw. Any unexpected
+        exception is treated as link death — flip _link_alive and exit so
+        the reconnect loop takes over; never fall out silently."""
         stop_frame = encode_frame(None, 0, self._port)
         try:
             while True:
@@ -195,6 +211,12 @@ class CircuitCubeSwitch(SwitchClient):
                     return
         except asyncio.CancelledError:
             raise
+        except Exception:
+            # Any other unhandled exception means the loop dies silently
+            # and we'd stay wedged thinking the link is alive. Flag death
+            # so the reconnect loop notices.
+            log.warning("[%s] keepalive loop crashed", self.switch_id, exc_info=True)
+            self._link_alive = False
 
     async def _reconnect_loop(self) -> None:
         """Watches `_link_alive`. When it's False, tear down the dead
