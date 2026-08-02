@@ -31,3 +31,8 @@ class TrainClient(ABC):
 
     @abstractmethod
     def state(self) -> TrainState: ...
+
+    def flash_indicator(self) -> None:  # noqa: B027 - intentional no-op default
+        """Briefly flash a visible indicator (e.g. onboard RGB) to signal
+        that a command was received. Optional — default is a no-op so
+        backends without RGB hardware don't have to implement it."""

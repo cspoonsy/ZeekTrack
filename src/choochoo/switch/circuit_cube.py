@@ -37,6 +37,14 @@ NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 NUS_WRITE_CHAR_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 NUS_NOTIFY_CHAR_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
 
+# Standard Bluetooth Battery Level characteristic (Battery Service 0x180f).
+# The Cube exposes it as a readable characteristic. We use GATT reads
+# rather than writes-without-response for the keepalive because reads
+# force BlueZ to actually round-trip to the peer — writes get buffered
+# locally and can succeed silently even after the link is dead, which
+# is what we saw producing 3+ minute zombie "connected" windows.
+BATTERY_LEVEL_CHAR_UUID = "00002a19-0000-1000-8000-00805f9b34fb"
+
 _VALID_PORTS = {"a", "b", "c"}
 _DEFAULT_NAME = "Tenka"
 _SCAN_TIMEOUT_S = 10.0
@@ -46,6 +54,15 @@ _CONNECT_TIMEOUT_S = 15.0
 # client down and re-runs _async_connect with exponential backoff.
 _RECONNECT_INITIAL_S = 5.0
 _RECONNECT_MAX_S = 30.0
+
+# Active liveness probe. Every _KEEPALIVE_INTERVAL_S we read the battery
+# characteristic (a real GATT round-trip) — this is what actually proves
+# the link is alive rather than "BlueZ thinks it is." If we haven't
+# successfully round-tripped a GATT op in _LIVENESS_TIMEOUT_S, we
+# declare the link dead so the reconnect loop takes over. The watchdog
+# catches the case where the probe hangs rather than fails outright.
+_KEEPALIVE_INTERVAL_S = 3.0
+_LIVENESS_TIMEOUT_S = 10.0
 
 
 def encode_frame(direction: Direction | None, magnitude: int, port: str) -> bytes:
@@ -77,6 +94,15 @@ class CircuitCubeSwitch(SwitchClient):
         # power cycle, but the TI SoC family behind the Cube keeps it.
         self._cached_address: str | None = None
         self._reconnect_task: asyncio.Task | None = None
+        self._keepalive_task: asyncio.Task | None = None
+        # Non-zero while a burst is running. Keepalive skips its probe when
+        # this is >0 so we don't compete with a live motor write.
+        self._burst_in_flight = 0
+        # Monotonic timestamp of the last successful GATT round-trip. The
+        # keepalive loop's watchdog uses this to detect wedged links
+        # (probe never fails but never returns either). Set at connect
+        # time so we don't false-positive before the first probe runs.
+        self._last_gatt_success_monotonic: float = 0.0
 
     # --- SwitchClient API --------------------------------------------------
 
@@ -140,7 +166,21 @@ class CircuitCubeSwitch(SwitchClient):
             device_or_addr = device
             address_for_log = device.address
 
-        client = BleakClient(device_or_addr, timeout=_CONNECT_TIMEOUT_S)
+        # disconnected_callback fires the moment BlueZ notices the peer is
+        # gone — much faster and more reliable than waiting for the next
+        # keepalive write to fail. On BlueZ we've seen BleakClient.is_connected
+        # return True after the link is already dead; the callback is the
+        # authoritative signal, so we flip _link_alive here and let the
+        # reconnect loop take over.
+        def _on_disconnected(_client) -> None:
+            log.info("[%s] BLE disconnected_callback fired", self.switch_id)
+            self._link_alive = False
+
+        client = BleakClient(
+            device_or_addr,
+            timeout=_CONNECT_TIMEOUT_S,
+            disconnected_callback=_on_disconnected,
+        )
         await client.connect()
         log.info("[%s] connected to Cube at %s", self.switch_id, address_for_log)
 
@@ -154,13 +194,88 @@ class CircuitCubeSwitch(SwitchClient):
         self._client = client
         self._char = char
         self._cached_address = address_for_log
-        # No watchdog on the Cube, so we can't probe the link the way
-        # BuWizz does. Mark the link alive optimistically; the next real
-        # write (or a failed write) toggles it correctly.
+        # No vendor watchdog on the Cube. Mark the link alive optimistically;
+        # the keepalive loop (below) is what actually proves it every few
+        # seconds by reading the battery characteristic (a real round-trip).
         self._link_alive = True
+        # Seed the liveness watchdog so we don't false-positive before the
+        # first probe runs. asyncio.get_event_loop().time() is monotonic
+        # and available even under structured concurrency.
         loop = asyncio.get_running_loop()
+        self._last_gatt_success_monotonic = loop.time()
+        self._keepalive_task = loop.create_task(self._keepalive_loop())
         if self._reconnect_task is None:
             self._reconnect_task = loop.create_task(self._reconnect_loop())
+
+    async def _keepalive_loop(self) -> None:
+        """Actively probe the link every _KEEPALIVE_INTERVAL_S with a
+        battery-level READ. Reads force a real GATT round-trip, unlike
+        writes-without-response which BlueZ can silently buffer even
+        after the peer has gone away.
+
+        Also runs a watchdog: if _LIVENESS_TIMEOUT_S elapses without a
+        successful GATT operation, declare the link dead and exit —
+        catches wedged links where the probe hangs rather than fails.
+
+        Suspended while a burst is running so we don't compete with the
+        motor write. Any unhandled exception flags the link dead so we
+        never fall out silently."""
+        loop = asyncio.get_running_loop()
+        try:
+            while True:
+                await asyncio.sleep(_KEEPALIVE_INTERVAL_S)
+                if self._burst_in_flight > 0:
+                    continue
+                if not self._link_alive:
+                    return
+
+                # Watchdog: has any GATT op succeeded recently?
+                since_success = loop.time() - self._last_gatt_success_monotonic
+                if since_success > _LIVENESS_TIMEOUT_S:
+                    log.warning(
+                        "[%s] no successful GATT op in %.1fs; declaring link dead",
+                        self.switch_id, since_success,
+                    )
+                    self._link_alive = False
+                    return
+
+                # Active probe: read battery. Wrap in wait_for so a hung
+                # BlueZ operation can't stall the whole event loop.
+                try:
+                    await asyncio.wait_for(
+                        self._probe_battery(),
+                        timeout=_LIVENESS_TIMEOUT_S,
+                    )
+                    self._last_gatt_success_monotonic = loop.time()
+                except TimeoutError:
+                    log.warning(
+                        "[%s] battery probe timed out; link presumed dead",
+                        self.switch_id,
+                    )
+                    self._link_alive = False
+                    return
+                except Exception:
+                    # Probe raised — _probe_battery already flipped
+                    # _link_alive. Reconnect loop takes over.
+                    return
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.warning("[%s] keepalive loop crashed", self.switch_id, exc_info=True)
+            self._link_alive = False
+
+    async def _probe_battery(self) -> None:
+        """Read the battery-level characteristic. Success proves the
+        link is round-tripping; failure sets _link_alive False and
+        re-raises."""
+        if self._client is None:
+            self._link_alive = False
+            raise RuntimeError("CircuitCube not connected")
+        try:
+            await self._client.read_gatt_char(BATTERY_LEVEL_CHAR_UUID)
+        except Exception:
+            self._link_alive = False
+            raise
 
     async def _reconnect_loop(self) -> None:
         """Watches `_link_alive`. When it's False, tear down the dead
@@ -184,6 +299,11 @@ class CircuitCubeSwitch(SwitchClient):
                         )
                     self._client = None
                     self._char = None
+                if self._keepalive_task is not None:
+                    self._keepalive_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await self._keepalive_task
+                    self._keepalive_task = None
 
                 log.info(
                     "[%s] BLE link dead; reconnect attempt in %.1fs",
@@ -213,6 +333,11 @@ class CircuitCubeSwitch(SwitchClient):
             with contextlib.suppress(asyncio.CancelledError):
                 await self._reconnect_task
             self._reconnect_task = None
+        if self._keepalive_task is not None:
+            self._keepalive_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._keepalive_task
+            self._keepalive_task = None
         if self._client is None:
             return
         # Best-effort stop before dropping BLE.
@@ -229,6 +354,7 @@ class CircuitCubeSwitch(SwitchClient):
         start_frame = encode_frame(direction, SWITCH_POWER, self._port)
         stop_frame = encode_frame(None, 0, self._port)
         stop_failed: Exception | None = None
+        self._burst_in_flight += 1
         try:
             await self._raw_write(start_frame)
             await asyncio.sleep(duration_ms / 1000)
@@ -238,6 +364,7 @@ class CircuitCubeSwitch(SwitchClient):
             except Exception as e:
                 log.warning("[%s] stop write failed: %s", self.switch_id, e)
                 stop_failed = e
+            self._burst_in_flight -= 1
         if stop_failed is not None:
             raise stop_failed
 
