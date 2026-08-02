@@ -78,6 +78,13 @@ class FakeBleakClient:
             raise RuntimeError("simulated BLE write failure (peer gone)")
         self.writes.append(bytes(data))
 
+    async def read_gatt_char(self, uuid) -> bytes:
+        # Battery-level probe. Fails when alive=False so the reconnect
+        # tests can flip a Cube "dead" via a single flag.
+        if not self.alive:
+            raise RuntimeError("simulated BLE read failure (peer gone)")
+        return bytes([100])  # 100% battery
+
 
 @pytest.fixture
 def fake_bleak(monkeypatch):
