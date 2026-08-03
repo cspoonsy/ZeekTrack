@@ -39,7 +39,7 @@ services:
       - "80"
     networks:
       macvlan_net:
-        ipv4_address: 192.168.88.50
+        ipv4_address: 192.168.88.247
     restart: unless-stopped
 
   fileshare:
@@ -59,7 +59,7 @@ services:
       - "445"
     networks:
       macvlan_net:
-        ipv4_address: 192.168.88.51
+        ipv4_address: 192.168.88.246
     restart: unless-stopped
 
   user:
@@ -81,7 +81,7 @@ services:
       - fileshare
     networks:
       macvlan_net:
-        ipv4_address: 192.168.88.52
+        ipv4_address: 192.168.88.248
     restart: unless-stopped
 
   
