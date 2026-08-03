@@ -88,6 +88,9 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Legacy MQTT-flavored web UI. Not part of the ChooChoo event configuration
+  # (the event runs Modbus for the train). Kept for demonstrating the V-series
+  # IoT vulnerabilities against the MQTT train controller.
   web-mqtt:
     image: choochoo:dev
     build:
