@@ -40,6 +40,7 @@ services:
     networks:
       macvlan_net:
         ipv4_address: 192.168.88.247
+        mac_address: "02:42:58:88:00:f7"
     restart: unless-stopped
 
   fileshare:
@@ -60,6 +61,7 @@ services:
     networks:
       macvlan_net:
         ipv4_address: 192.168.88.246
+        mac_address: "02:42:58:88:00:f6"
     restart: unless-stopped
 
   user:
@@ -82,6 +84,7 @@ services:
     networks:
       macvlan_net:
         ipv4_address: 192.168.88.248
+        mac_address: "02:42:58:88:00:f8"
     restart: unless-stopped
 
   
