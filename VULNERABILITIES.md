@@ -11,14 +11,29 @@
 > auditor; many of them ship as the *default* behavior of off-the-shelf
 > brokers, gateways, and PLCs.
 >
-> The system runs in one of two modes; the catalog is split accordingly:
+> The catalog is split into three parts, one per attack surface. Under
+> the ChooChoo event configuration, Parts 2 and 3 are both live (Modbus
+> train + MQTT switch, plus an M10 bridge that lets a Modbus master
+> reach the switch); Part 1 covers the legacy MQTT train, retained as
+> a reference surface.
 >
-> - **Part 1 — IoT mode (MQTT).** Mosquitto broker, retained discovery,
->   topic-based pub/sub.
-> - **Part 2 — Enterprise mode (Modbus/TCP).** Point-to-point industrial
->   protocol; no broker, no auth, register-level commands.
+> - **Part 1 — IoT mode (MQTT), train.** Mosquitto broker, retained
+>   discovery, topic-based pub/sub. Deprecated for the event but still
+>   demonstrable if the operator brings up `--profile legacy-web`.
+> - **Part 2 — Enterprise mode (Modbus/TCP), train + switch bridge.**
+>   Point-to-point industrial protocol; no broker, no auth, register-level
+>   commands. The outstation also mediates the track switch (M10).
+> - **Part 3 — Track-switch surface (MQTT).** Same broker as Part 1;
+>   dedicated topics under `choochoo/switch/+/#`. S1 (anonymous throw),
+>   S2 (retained-topic recon), S3 (spoof retained state / LWT semantics).
 
 # Part 1 — IoT mode (MQTT)
+
+> **Event note.** The ChooChoo training event runs Modbus for the train
+> and MQTT for the track switch (see Part 3 — S1). The V-series
+> vulnerabilities below still apply to anyone running the legacy MQTT
+> train controller, but the event's live MQTT surface is the switch
+> broker, not the train broker.
 
 ## Network exposure
 
@@ -398,6 +413,64 @@ Modbus, they can POST to `/api/motor` and the web bridge translates it
 into a Modbus write on their behalf. **Switching to enterprise mode
 does not, by itself, fix the browser-side problem.**
 
+## M10 — Anonymous switch throws via Modbus coil write
+
+The outstation also mediates the track switch (see the point map — Coil 1
+is `throw to straight`, Coil 2 is `throw to curve`). Both coils are
+edge-triggered: writing True fires an MQTT `ThrowCommand` at the switch
+broker and the outstation latches the coil back to False. No auth, no rate
+limit at the Modbus layer — same posture as the E-stop coil.
+
+**Attacker action**
+
+```sh
+# read the switch DIs (position + online flag) to observe current state
+mbpoll -m tcp -a 1 -t 0 -r 3 -c 3 <host>
+
+# throw to straight (coil address 1, 1-based on mbpoll wire, so `-r 2`)
+mbpoll -m tcp -a 1 -t 0 -r 2 -c 1 <host> 1
+
+# throw to curve (coil address 2, mbpoll `-r 3`)
+mbpoll -m tcp -a 1 -t 0 -r 3 -c 1 <host> 1
+```
+
+**Mitigation delta**
+
+The `SwitchController`'s client-side cooldown (`SWITCH_COOLDOWN_S`) still
+fires — an attacker cannot burn the switch motor by spamming coil writes.
+But they can time a throw for the exact moment the train is entering the
+switch, which is the more interesting attack. **Safety mitigation, not a
+security mitigation.**
+
+The Modbus wire gives the attacker no feedback on whether the throw was
+cooldown-rejected: the coil latches back to False regardless. To confirm
+they need to poll the position DIs (2 and 3) or sniff the switch's MQTT
+`event` topic on the same broker.
+
+**What Zeek sees**
+
+`modbus.log` records the Write-Single-Coil / Write-Multiple-Coils PDU with
+target address 1 or 2 and value 1. A rapid alternation between coils 1
+and 2 is a distinctive signature — the outstation's own operator has no
+reason to flip both in quick succession.
+
+**Detection hook**
+
+Count `func=WRITE_SINGLE_COIL OR WRITE_MULTIPLE_COILS` messages targeting
+`addr in {1, 2}` per source over a rolling window. Anything faster than
+one per 2 s cannot be legitimate operator input (that's the cooldown
+floor). Complementary to the S1 MQTT detection — the same throw fires
+both signals if the trainee is watching both surfaces.
+
+**What Zeek does not see**
+
+The MQTT-side `ThrowCommand` the outstation publishes as a downstream
+side effect only reaches the switch controller — the outstation is the
+MQTT publisher, and any Zeek sensor listening on the broker will see
+`id.orig_h` as the outstation, not the attacker. Correlation across
+protocols requires joining `modbus.log` (coil write from attacker) with
+`mqtt_publish.log` (throw from outstation) on timestamp.
+
 ## Suggested attacker progression (Modbus mode)
 
 **Stage 1 — Recon (Zeek visibility: connection on 5020/tcp)**
@@ -452,3 +525,139 @@ does not, by itself, fix the browser-side problem.**
   is the more honest depiction of real industrial networks. A "hardened"
   Modbus profile (TLS + per-client cert auth + a write-permitted ACL)
   could be added as a future stage to parallel the MQTT hardening.
+
+# Part 3 — Track-switch surface (MQTT)
+
+> **Event note.** During the ChooChoo training event the switch broker is
+> the only live MQTT surface. Trainees who reach the LAN and probe
+> `1883/tcp` will find the switch topics under `choochoo/switch/+/#`.
+> The train's MQTT topics (`choochoo/train/+/#`) may also be visible if
+> the legacy controller is running, but the event does not exercise them.
+
+## Network exposure
+
+The switch adds no new listening port — everything rides on the same
+Mosquitto broker at `1883/tcp` as the legacy MQTT train (see V1). Every
+attacker who has already reached the broker is one `mosquitto_pub` away
+from throwing the switch.
+
+## S1 — Anonymous throw commands drive real hardware
+
+Baseline: same anonymous plaintext MQTT broker as V1. Anyone on the LAN
+can publish to `choochoo/switch/<id>/cmd/throw` and physically move the
+track under the train.
+
+**Attacker action**
+
+```sh
+# One-off throw.
+mosquitto_pub -h <broker> -t choochoo/switch/sw1/cmd/throw \
+  -m '{"action":"throw","direction":"forward"}'
+
+# Whether it succeeded: subscribe to the outcome event alongside.
+mosquitto_sub -h <broker> -t 'choochoo/switch/sw1/event' -v &
+mosquitto_pub -h <broker> -t choochoo/switch/sw1/cmd/throw \
+  -m '{"action":"throw","direction":"reverse"}'
+# → {"switch_id":"sw1","direction":"reverse","outcome":"ok",...}
+# or → {"switch_id":"sw1","direction":"reverse","outcome":"cooldown_rejected",...}
+```
+
+**Mitigation delta vs V1**
+
+The switch controller's client-side cooldown (`SWITCH_COOLDOWN_S`) and
+bounded burst (`SWITCH_BURST_MS`) mean an attacker cannot burn the motor
+out by spamming throws — but they can still divert the train at chosen
+moments. This is a *safety* mitigation, not a security mitigation.
+
+The cooldown-rejected event tells the attacker if the broker even got
+their throw; there is no other feedback signal.
+
+**What Zeek sees**
+
+Every throw is a distinct MQTT PUBLISH on
+`choochoo/switch/<id>/cmd/throw`. `mqtt_publish.log` will show the source
+IP in `id.orig_h`, the topic, and the JSON payload. A rapid burst of
+`throw` messages against the cooldown floor is a distinctive signature:
+throws arriving faster than one per 2 seconds cannot possibly all be
+legitimate operator input.
+
+**Detection hook**
+
+```zeek
+# Count PUBLISH events per source over a 10-second rolling window.
+# Alert on any source exceeding one throw per 2 s.
+```
+
+**Cross-protocol note.** Under the event configuration the SAME throw
+can arrive via the Modbus outstation (M10). When the outstation publishes
+`cmd/throw` on the attacker's behalf, `mqtt_publish.log`'s `id.orig_h`
+is the outstation container — NOT the attacker. Correlating the two
+requires joining `modbus.log` (coil write) with `mqtt_publish.log` (throw)
+on timestamp. See M10 for the Modbus-side detection.
+
+## S2 — Retained state and discovery topics leak the schema
+
+Both `choochoo/switch/<id>/state` and `.../discovery` are published
+`retain=true`. The moment a subscriber joins, the broker replays the last
+value — an attacker learns:
+
+- Switch IDs in use (all of them, via wildcard subscribe to
+  `choochoo/switch/+/state`).
+- Current position (attack timing).
+- Cooldown window remaining (`cooldown_until_ts` in `state`).
+- The safety envelope (`max_burst_ms`, `cooldown_s` in `discovery`).
+- Whether the controller is alive (`online` in `discovery`).
+
+**Attacker action**
+
+```sh
+# Enumerate every switch on the bus in one command, with retained values.
+mosquitto_sub -h <broker> -t 'choochoo/switch/+/#' -v -R
+```
+
+**What Zeek sees**
+
+MQTT SUBSCRIBE from a new source with a wildcard on `choochoo/switch/+`.
+Legitimate consumers subscribe to one specific switch ID; anyone doing
+enumeration hits the wildcard. In `mqtt_subscribe.log`, `topics` will
+contain the `+` character — trivial signature.
+
+## S3 — Discovery beacon's LWT is trustworthy — but only for ungraceful disconnects
+
+The switch controller registers a Last Will & Testament that flips
+`discovery.online` to `false` when the controller drops. Both the web UI
+pill and the Modbus `DI_SWITCH_ONLINE` DI read this flag as the
+authoritative controller-liveness signal.
+
+**But**: the payload field `state.connected` (which describes the
+controller's BLE link, not its own liveness) stays retained with the last
+value the controller ever published. A dead controller with a running
+BLE session at time of death leaves `state.connected = true` in retention
+forever. An HMI that reads `state.connected` for liveness will show a
+green pill against a corpse. Both the web UI and the Modbus outstation
+were reworked to read `discovery.online` for exactly this reason.
+
+**Attacker action** — spoof the state topic. As long as the retained
+value stays plausible, downstream consumers that read the wrong field
+believe it:
+
+```sh
+# With the real controller stopped, replace the retained state so
+# consumers see a bogus position + connected=true.
+mosquitto_pub -h <broker> -r -t choochoo/switch/sw1/state \
+  -m '{"switch_id":"sw1","position":"forward","connected":true,"last_throw_ts":0,"cooldown_until_ts":0}'
+```
+
+**What Zeek sees**
+
+MQTT PUBLISH with `retain=1` from an unexpected source. In
+`mqtt_publish.log`, the retain flag is preserved; alerting on
+`retain=T` + topic matching `choochoo/switch/+/state` from any source
+that is not the switch controller container is a strong signal.
+
+**Detection hook**
+
+```zeek
+# Alert on any retained publish to a switch state/discovery topic
+# from a client that is not the known switch controller.
+```

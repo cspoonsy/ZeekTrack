@@ -14,6 +14,15 @@ control planes that the trainer can flip between with a single flag:
 Both modes drive the same physical train and are intentionally vulnerable in
 their baseline configuration. See `VULNERABILITIES.md` for the catalog.
 
+**Event posture.** The ChooChoo training event runs **Modbus** for the train
+and **MQTT** for a separate track-switch device (Circuit Cubes Bluetooth
+Bit — see the "Track switch" section below). The legacy MQTT train
+controller stays in-repo as a demonstrable IoT surface and is still
+covered by V1–V10 in `VULNERABILITIES.md`, but every entry point logs a
+deprecation warning; operators running the event should use
+`--protocol modbus`. The switch panel is always visible in the web UI
+regardless of the train's protocol.
+
 ## Prerequisites
 
 The fully containerized path needs **only Docker**. The host-mode and
@@ -57,15 +66,18 @@ git clone <repo-url> choochoo && cd choochoo
 ├── docker-compose.real.yml          # hardware stack: web/broker in containers, controller bare-metal
 ├── pyproject.toml + uv.lock         # uv-managed Python deps
 ├── src/choochoo/
-│   ├── protocol.py                  # MQTT topic names + Pydantic schemas
-│   ├── controller.py                # MQTT controller (subscribes + drives train)
-│   ├── modbus_controller.py         # Modbus/TCP outstation
+│   ├── protocol.py                  # train MQTT topic names + Pydantic schemas
+│   ├── switch_protocol.py           # switch MQTT topics + models + safety envelope
+│   ├── controller.py                # train MQTT controller (subscribes + drives train)
+│   ├── switch_controller.py         # switch MQTT controller (subscribes + drives Cube)
+│   ├── modbus_controller.py         # Modbus/TCP outstation (train + switch surface)
 │   ├── modbus_bridge.py             # Modbus master used by the web UI
-│   ├── modbus_map.py                # point map (HR / coils / IRs / DIs)
+│   ├── modbus_map.py                # point map (HR / coils / IRs / DIs, both devices)
 │   ├── mqtt_auth.py                 # env-driven auth + TLS for paho clients
-│   ├── web.py + static/             # FastAPI UI: serves both protocols
-│   ├── cli.py                       # entry: `controller` / `web` / `send`
-│   └── train/                       # FakeTrain (dev) + PoweredUpTrain (BLE)
+│   ├── web.py + static/             # FastAPI UI: train + switch panels, both protocols
+│   ├── cli.py                       # `controller` / `switch-controller` / `web` / `send` / `switch-send`
+│   ├── train/                       # FakeTrain (dev) + PoweredUpTrain + BuWizz backends
+│   └── switch/                      # FakeSwitch (dev) + CircuitCubeSwitch (BLE) backends
 ├── tests/                           # pytest suite
 ├── attacker/                        # Kali container for virtual events
 │   ├── Dockerfile
@@ -90,7 +102,7 @@ git clone <repo-url> choochoo && cd choochoo
 │   ├── pi-setup.sh                  # one-shot Pi installer
 │   ├── bootstrap-hardened.sh        # generate certs + creds for hardened mode
 │   └── run-hardened.sh              # launch with the right per-role creds
-└── VULNERABILITIES.md               # full attack catalog (V1–V10 MQTT, M1–M9 Modbus)
+└── VULNERABILITIES.md               # full attack catalog (V1–V10 MQTT train, M1–M10 Modbus, S1–S3 switch)
 ```
 
 If you cloned the repo on Windows, `git` may have stripped the executable
@@ -102,18 +114,32 @@ after cloning.
 Two compose files, one per posture. Pick by whether you have a real
 train on the table.
 
-|                | Hardwareless — `docker-compose.fake.yml`                        | Hardware — `docker-compose.real.yml`                                  |
-|----------------|-----------------------------------------------------------------|----------------------------------------------------------------------|
-| **MQTT**       | 3 containers: web + mosquitto + controller-fake                 | 2 containers (web + mosquitto) + controller bare-metal on the host (BLE) |
-| **Modbus**     | 2 containers: web + controller-fake                             | 1 container (web) + controller bare-metal on the host (BLE)          |
+|                | Hardwareless — `docker-compose.fake.yml`                                                             | Hardware — `docker-compose.real.yml`                                                                                    |
+|----------------|------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|
+| **MQTT train** | 3 containers: web-mqtt + mosquitto + controller-mqtt (legacy — `--profile legacy-web` for the web)   | 2 containers (web + mosquitto) + controller bare-metal on the host (BLE). Legacy — web is under `--profile legacy-web`. |
+| **Modbus train** | 2 containers: web-modbus + controller-modbus                                                       | 1 container (web) + controller bare-metal on the host (BLE outstation)                                                  |
+| **Switch (MQTT)** | Stacks on top of either train mode: mosquitto + switch-controller-mqtt (FakeSwitch inside compose) | mosquitto in container + switch controller bare-metal on the host (owns Cube BLE). Same host as the train's BLE radio.  |
 
 The `.real.yml` file has no controller service on purpose: the
-controller has to run on whatever machine owns the BLE radio (a
+train controller has to run on whatever machine owns the BLE radio (a
 Raspberry Pi, or a Mac / Linux workstation with Bluetooth), because
 Docker Desktop on macOS has no BLE passthrough and Linux would need
-`--privileged` + host networking to get one. The containers in
-`.real.yml` reach the host controller via `host.docker.internal:5020`
-(Modbus) or by publishing 1883 on the host loopback (MQTT).
+`--privileged` + host networking to get one. The switch controller has
+the same constraint — it owns the Circuit Cube's BLE handle. Both live
+alongside each other bare-metal in real mode. The containers in
+`.real.yml` reach the host train controller via
+`host.docker.internal:5020` (Modbus) or by publishing 1883 on the host
+loopback (MQTT); the bare-metal switch controller connects out to the
+containerized mosquitto over the same host-loopback 1883.
+
+**Event configuration.** Stack `--profile modbus --profile mqtt` on the
+fake stack (or use `.real.yml` for hardware). The `mqtt` profile brings
+up mosquitto and (on `.fake.yml`) the FakeSwitch controller, both
+*without* the legacy MQTT web UI (that lives under `--profile
+legacy-web`), so port 8000 is free for the Modbus web to bind. On
+`.real.yml` the switch controller is bare-metal via the systemd unit
+`choochoo-switch-controller.service` (see "On the Raspberry Pi" below);
+the `mqtt` profile there only brings up mosquitto.
 
 ## Networking reference
 
@@ -145,11 +171,12 @@ same compose network:
 
 | Service (compose name)   | Hostname (DNS) | Container port(s)      | Speaks           | Purpose |
 |--------------------------|----------------|------------------------|------------------|---------|
-| `mosquitto`              | `mosquitto`    | 1883/tcp               | MQTT             | Anonymous broker (baseline profile) |
-| `controller-mqtt`        | *(default)*    | —                      | MQTT client      | Bridges MQTT ↔ train |
-| `web-mqtt`               | *(default)*    | 8000/tcp               | HTTP             | FastAPI UI (MQTT mode) |
-| `controller-modbus`      | `controller`   | 5020/tcp               | Modbus/TCP       | Modbus outstation (unit ID 1) — `.fake.yml` only; under `.real.yml` the outstation runs on the host at `host.docker.internal:5020` |
-| `web-modbus`             | *(default)*    | 8000/tcp               | HTTP             | FastAPI UI (Modbus mode) |
+| `mosquitto`              | `mosquitto`    | 1883/tcp               | MQTT             | Anonymous broker (baseline profile). Shared by the legacy MQTT train AND the switch. |
+| `controller-mqtt`        | *(default)*    | —                      | MQTT client      | Bridges MQTT ↔ train (legacy; deprecated for the event). Logs a deprecation warning on startup. |
+| `switch-controller-mqtt` | *(default)*    | —                      | MQTT client      | Bridges MQTT ↔ track switch (Circuit Cubes Bit). FakeSwitch in `.fake.yml`; bare-metal on the host in `.real.yml` (owns Cube BLE). |
+| `web-mqtt`               | *(default)*    | 8000/tcp               | HTTP             | FastAPI UI (MQTT-train mode). Under `--profile legacy-web` only. |
+| `controller-modbus`      | `controller`   | 5020/tcp               | Modbus/TCP + MQTT client | Modbus outstation (unit ID 1). Under the event config it *also* speaks MQTT — subscribes to switch state/discovery on `mosquitto` and publishes ThrowCommands on coil writes (M10). `.fake.yml` only; under `.real.yml` the outstation runs on the host at `host.docker.internal:5020`. |
+| `web-modbus`             | *(default)*    | 8000/tcp               | HTTP + MQTT client | FastAPI UI (Modbus mode). Talks Modbus to the outstation for the train AND MQTT to `mosquitto` for the switch panel. |
 | `attacker`               | `attacker`     | —                      | shell / tools    | Kali box with `nmap`, `mosquitto-clients`, `mbpoll`, `pymodbus`, `tcpdump` |
 | `intranet`               | `intranet`     | 80/tcp                 | HTTP             | Fake corporate portal (`http://intranet/`) |
 | `fileshare`              | `fileshare`    | 139/tcp, 445/tcp       | SMB              | Guest-readable share `//fileshare/section7` |
@@ -161,18 +188,88 @@ same compose network:
 
 ### Data flow
 
+The switch is reachable over two protocols simultaneously. A throw
+initiated from any of the three surfaces below (web button, Modbus coil,
+raw MQTT publish) ends up producing the same 5-byte ASCII BLE frame
+(`dNNNc`) to the Cube. Same physical outcome, three attack surfaces.
+
+**Train — MQTT path (legacy; deprecated for the event):**
+
 ```
                     ┌──────────────┐
      (from host) ───▶│   web-mqtt   │──MQTT──▶ ┌─────────────┐──▶ controller-mqtt ──▶ (train)
    http://:8000     │  :8000       │           │  mosquitto  │
                     └──────────────┘           │   :1883     │──MQTT──▶  attacker (docker exec)
                                                └─────────────┘
+```
 
+**Train — Modbus path (event config):**
+
+```
                     ┌──────────────┐
      (from host) ───▶│   web-modbus │──Modbus/TCP──▶ controller-modbus:5020 ──▶ (train)
    http://:8000     │  :8000       │
                     └──────────────┘
+```
 
+**Switch — MQTT path (S1). Web button, `switch-send throw`, or attacker `mosquitto_pub`:**
+
+```
+   ┌───────────┐   POST /api/switch/throw    ┌─────────────┐   cmd/throw    ┌──────────────────────────┐
+   │  browser  │────────────────────────────▶│  web-*      │───MQTT────────▶│  mosquitto :1883         │
+   └───────────┘                             │  SwitchBridge│                └───────────┬──────────────┘
+        ▲                                    └─────────────┘                             │
+        │  view.online (via WebSocket)             ▲                                     │ cmd/throw
+        │                                          │                                     ▼
+        │        state + discovery (retained)      │                     ┌────────────────────────────┐
+        └──────────────────────────────────────────┤                     │  switch-controller-mqtt    │
+                                                   │                     │  (bare-metal in real mode) │
+                                                   │                     └───────────────┬────────────┘
+                                                   │                                     │ dNNNc
+                                                   │        state + discovery            ▼
+                                                   └────────────────────────────── (Circuit Cube via BLE)
+```
+
+**Switch — Modbus path (M10). Attacker writes coil 1 or 2 on the train outstation:**
+
+```
+   ┌───────────┐   Write-Single-Coil (FC 5)  ┌──────────────────┐  MQTT cmd/throw
+   │  attacker │────────────────────────────▶│  controller-modbus│──────────────────▶ mosquitto :1883
+   │  (mbpoll) │       coil 1 or 2 = True    │  (SwitchMirror)  │                     (as if from operator)
+   └───────────┘                             └──────────────────┘                            │
+                                                    ▲                                        │ cmd/throw
+                                                    │  state + discovery                     ▼
+                                                    │  → DI 2/3/4                 switch-controller-mqtt
+                                                    └────────────────────────── ... ─▶ (Circuit Cube via BLE)
+```
+
+Key observation: on the Modbus path the outstation publishes the MQTT
+throw *on the attacker's behalf* — a Zeek sensor listening on the broker
+sees `id.orig_h = controller-modbus`, not the attacker's IP. Correlating
+back to the real source requires joining `modbus.log` (coil write from
+attacker) with `mqtt_publish.log` (throw from outstation) on timestamp.
+
+**Controller liveness (LWT).** Both the switch controller's retained
+`discovery` topic and its Last Will & Testament are the authoritative
+liveness signal:
+
+```
+   switch-controller  ─── on connect ───▶ mosquitto: retain discovery {online: true}
+                     ─── if ungraceful ─▶ mosquitto broadcasts LWT: discovery {online: false}
+                                                        │
+                                                        ▼
+                             web-* SwitchBridge  ── view.online → UI pill
+                             controller-modbus SwitchMirror ── DI_SWITCH_ONLINE
+
+   The payload's `SwitchState.connected` field is NOT reliable for
+   controller-liveness — it stays cached in retention with whatever value
+   the controller last published, even after the controller dies. Both
+   the UI pill and DI 4 read `discovery.online` instead.
+```
+
+**Zeek / SIEM ingest (unchanged; both switch surfaces are visible):**
+
+```
                     (sniff eth0)
    any traffic  ──▶ zeek ──▶ /logs volume ──▶ vector ──TCP:7777──▶ simple-relay ──TCP:4023──▶ gravwell ──▶ UI :8080
 ```
@@ -192,6 +289,10 @@ Client-side (controller / web / send):
 | `CHOOCHOO_TRAIN`          | `fake`           | Train backend: `fake` / `powered_up` / `buwizz`                    |
 | `CHOOCHOO_HUB_NAME`       | `Smart Hub`      | BLE-advertised name of the Powered Up hub                          |
 | `CHOOCHOO_BUWIZZ_NAME`    | `BuWizz3`        | BLE-advertised name of the BuWizz hub                              |
+| `CHOOCHOO_SWITCH_ID`      | `sw1`            | Track-switch identifier used in topic prefixes                     |
+| `CHOOCHOO_SWITCH_KIND`    | `fake`           | Switch backend: `fake` / `circuit_cube`                            |
+| `CHOOCHOO_CUBE_NAME`      | `Tenka`          | Substring match against the Circuit Cube's BLE advertised name     |
+| `CHOOCHOO_CUBE_PORT`      | `a`              | Circuit Cube motor port for this switch: `a` / `b` / `c`           |
 | `CHOOCHOO_USER` / `_PASSWORD` / `_TLS_CA` | *(unset)* | Broker auth + TLS for the hardened profile             |
 
 Noise-simulator (`user` service):
@@ -374,12 +475,15 @@ Trainer answer key (host-side, never inside the container):
 - `attacker/SOLUTIONS.md` — suggested progression with concrete payloads
 - `VULNERABILITIES.md` — full vulnerability catalog with Zeek detection hooks
 
-## Quick start — real train on Mac / Linux workstation (hybrid)
+## Quick start — real hardware on Mac / Linux workstation (hybrid)
 
 For local hardware demos where the developer machine has the BLE
 radio — a Mac with Bluetooth permission, or a Linux box with `bluez`.
-The controller runs on the host (owns BLE); everything else runs in
-containers via `docker-compose.real.yml`. Two terminals, one per role.
+The BLE-owning **controllers run bare-metal on the host** (Docker on
+macOS has no BLE passthrough; on Linux it needs `--privileged` + host
+networking); everything else runs in containers via
+`docker-compose.real.yml`. Each bare-metal controller needs its own
+terminal.
 
 **Prerequisites — install the BLE extra once:**
 
@@ -392,18 +496,25 @@ macOS (bleak's CoreBluetooth backend). On macOS, grant your terminal
 Bluetooth permission the first time it scans: System Settings →
 Privacy & Security → Bluetooth.
 
-### Modbus mode (Enterprise / OT)
+Two BLE devices, two bare-metal processes. Neither is in
+`docker-compose.real.yml` on purpose.
+
+### Train — Modbus mode (Enterprise / OT)
 
 ```sh
-# Terminal 1 — bring up the web UI in a container. It'll poll the
-# host outstation at host.docker.internal:5020.
+# Terminal 1 — web UI in a container. It polls the host outstation at
+# host.docker.internal:5020 for the train and reaches mosquitto for
+# the switch panel (--profile mqtt below).
 docker compose -f docker-compose.real.yml --profile modbus up --build -d
 
-# Terminal 2 — controller runs bare-metal on this Mac. Owns the BLE
-# radio, hosts the Modbus outstation on 0.0.0.0:5020.
+# Terminal 2 — train controller bare-metal. Owns the BuWizz BLE
+# radio, hosts the Modbus outstation on 0.0.0.0:5020, and also
+# subscribes to the switch broker so its M10 coil handlers work
+# (see the event-configuration section below).
 CHOOCHOO_PROTOCOL=modbus \
 CHOOCHOO_TRAIN=buwizz \
 CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
+CHOOCHOO_SWITCH_BROKER=localhost \
     uv run choochoo -v controller
 ```
 
@@ -415,28 +526,93 @@ turns solid green. If the pill stays at `BLE • …`, the web
 container can't reach the host outstation — see the troubleshooting
 sub-section below.
 
-### MQTT mode (IoT)
+### Train — MQTT mode (legacy IoT)
 
 ```sh
 # Terminal 1 — Mosquitto broker + web UI in containers. The broker
 # publishes 1883 on the host loopback so the bare-metal controller
 # can reach it at localhost:1883.
-docker compose -f docker-compose.real.yml --profile mqtt up --build -d
+docker compose -f docker-compose.real.yml --profile mqtt --profile legacy-web up --build -d
 
-# Terminal 2 — controller runs bare-metal on this Mac.
+# Terminal 2 — train controller bare-metal.
 CHOOCHOO_TRAIN=buwizz \
 CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
 CHOOCHOO_BROKER=localhost \
     uv run choochoo -v controller
 ```
 
-### Stacking defender / attacker / noise on the real train
+The legacy MQTT web UI is under `--profile legacy-web` so it doesn't
+collide with `web-modbus` on host port 8000.
+
+### Track switch — MQTT (any train mode)
+
+The switch is always MQTT-only and always runs bare-metal on the
+host. It reaches the containerized `mosquitto` at `localhost:1883`
+(the broker publishes on the host loopback under both `--profile mqtt`
+and `--profile modbus`, provided `--profile mqtt` is included).
+
+```sh
+# Terminal 3 — switch controller bare-metal. Owns the Circuit Cube
+# BLE handle. Connects out to the containerized broker.
+CHOOCHOO_SWITCH_KIND=circuit_cube \
+CHOOCHOO_CUBE_NAME=Tenka \
+CHOOCHOO_CUBE_PORT=a \
+CHOOCHOO_BROKER=localhost \
+    uv run choochoo -v switch-controller
+```
+
+When it logs `connected to Cube at <addr>` and `connected rc=Success,
+subscribing to choochoo/switch/sw1/cmd/+`, the "Track switch" panel
+in the web UI flips its liveness pill to **Switch · Connected**
+(green). The retained state also updates on every throw, so the
+position pill (Straight / Curve) reflects the last commanded
+direction.
+
+Ad-hoc throw from a fourth terminal (useful for verifying without
+clicking the UI):
+
+```sh
+uv run choochoo switch-send throw forward   # wire direction (see mapping notes)
+```
+
+### Event configuration — Modbus train + MQTT switch stacked
+
+The ChooChoo event runs the train under Modbus and the switch under
+MQTT. On the workstation:
+
+```sh
+# Terminal 1 — containers: mosquitto + web-modbus.
+docker compose -f docker-compose.real.yml \
+    --profile modbus --profile mqtt up --build -d
+
+# Terminal 2 — bare-metal train outstation. CHOOCHOO_SWITCH_BROKER
+# lets the outstation's SwitchMirror publish MQTT throws when a
+# Modbus master writes coil 1 or coil 2 (M10).
+CHOOCHOO_PROTOCOL=modbus \
+CHOOCHOO_TRAIN=buwizz \
+CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
+CHOOCHOO_SWITCH_BROKER=localhost \
+    uv run choochoo -v controller
+
+# Terminal 3 — bare-metal switch controller.
+CHOOCHOO_SWITCH_KIND=circuit_cube \
+CHOOCHOO_CUBE_NAME=Tenka \
+CHOOCHOO_CUBE_PORT=a \
+CHOOCHOO_BROKER=localhost \
+    uv run choochoo -v switch-controller
+```
+
+Web UI at <http://localhost:8000>. Both surfaces (train + switch)
+should show connected pills once both bare-metal processes are up.
+
+### Stacking defender / attacker / noise
 
 Same `--profile` flags as `.fake.yml`:
 
 ```sh
 docker compose -f docker-compose.real.yml \
-    --profile modbus --profile attacker up -d
+    --profile modbus --profile mqtt \
+    --profile attacker up -d
 ```
 
 On the physical RaspPi box:
@@ -489,6 +665,44 @@ controller — you forgot `uv sync --extra pi`.
 lines). These are CoreBluetooth's notification-callback selector names,
 **not** errors — the trailing `error_` is just Objective-C's parameter
 slot. Drop the `-v` flag to quiet them.
+
+**Switch panel stays on "Switch · …" or "Switch · Offline".** The web
+container's SwitchBridge can't see the switch controller's retained
+discovery beacon. Check:
+
+```sh
+# 1. Is the bare-metal switch controller running?
+ps aux | grep 'switch-controller' | grep -v grep
+
+# 2. Can the web container reach mosquitto? (mosquitto is only in the
+#    compose network under --profile mqtt — if the profile isn't
+#    active, no broker exists.)
+docker exec choochoo-web-modbus-real python3 -c \
+    "import socket; s=socket.socket(); s.settimeout(2); \
+     s.connect(('mosquitto',1883)); print('tcp ok')"
+
+# 3. Is the switch controller actually connected to the broker?
+docker exec choochoo-mosquitto-real mosquitto_sub \
+    -t 'choochoo/switch/+/discovery' -C 1 -W 2
+# Expect a JSON blob with online:true. If online:false, the LWT
+# fired — the controller crashed or lost broker connectivity.
+```
+
+**Switch controller finds no BLE device.** The Cube's advertised name
+must contain the `CHOOCHOO_CUBE_NAME` substring (default `Tenka`).
+Vendor ships each Cube as `Tenka<4-char-suffix>` — the default matches
+any of them. If you renamed it via the vendor app, set the env var to
+match. To list what's advertising nearby:
+
+```sh
+uv run python -c "import asyncio, bleak; print(asyncio.run(bleak.BleakScanner.discover(timeout=8)))"
+```
+
+**Switch throws visible in the UI but the motor doesn't move.** The
+controller likely lost its BLE handle (macOS CoreBluetooth quirk after
+long idle periods). The reconnect loop will recover on its own within
+~10 s; watch the switch-controller terminal for a fresh `connected to
+Cube at <addr>` log line. If it doesn't recover, restart the process.
 
 ## Quick start — host, no hardware (legacy path)
 
@@ -544,15 +758,50 @@ Reproducible Pi deploy (systemd):
 ```sh
 git clone <repo> ~/choochoo && cd ~/choochoo
 ./scripts/pi-setup.sh
-sudo $EDITOR /etc/choochoo/controller.env   # set broker host, hub name, etc.
-sudo systemctl enable --now choochoo-controller
-sudo journalctl -u choochoo-controller -f
+sudo $EDITOR /etc/choochoo/controller.env         # train: broker host, hub name, protocol
+sudo $EDITOR /etc/choochoo/switch-controller.env  # switch: cube name, port, switch id
+sudo systemctl enable --now choochoo-controller choochoo-switch-controller
+sudo journalctl -u choochoo-controller -u choochoo-switch-controller -f
 ```
 
 The setup script installs system packages (bluez, build deps), adds the user
 to the `bluetooth` group, installs `uv`, syncs dependencies with the `pi`
-extra, and drops a templated systemd unit at
-`/etc/systemd/system/choochoo-controller.service`. Re-running is idempotent.
+extra, and drops two templated systemd units at
+`/etc/systemd/system/choochoo-controller.service` (the train — MQTT or
+Modbus outstation depending on env) and
+`/etc/systemd/system/choochoo-switch-controller.service` (the track switch
+— MQTT). Re-running is idempotent.
+
+### Event configuration (Modbus train + MQTT switch)
+
+For the ChooChoo training event the whole stack lives on the Pi:
+
+1. **Bare-metal (BLE-owning) processes** — the two systemd units above.
+   Each owns one BLE peer and reconnects automatically on power-cycle.
+   - `choochoo-controller.service` — Modbus outstation on `0.0.0.0:5020`
+     driving the BuWizz. Config via `/etc/choochoo/controller.env`; the
+     example file has a commented Modbus block ready to uncomment.
+   - `choochoo-switch-controller.service` — MQTT client driving the
+     Circuit Cube. Config via `/etc/choochoo/switch-controller.env`.
+2. **Containerized surfaces** — everything else:
+   ```sh
+   docker compose -f docker-compose.real.yml \
+       --profile modbus --profile mqtt up -d
+   ```
+   `mqtt` brings up mosquitto (both the bare-metal switch controller and
+   the containerized web-modbus point at it). `modbus` brings up the
+   operator's web UI. `web-mqtt` is on a separate `legacy-web` profile
+   so it doesn't collide with `web-modbus` on host port 8000.
+
+Stack `--profile attacker`, `--profile noise`, `--profile sensor`,
+`--profile gravwell` alongside for trainee attack surfaces, background
+traffic, and defender tooling. All four match how they're used in
+`docker-compose.fake.yml`.
+
+The web UI is at `http://<pi>:8000`. Zeek's Modbus and MQTT analyzers
+both light up under the event configuration: `modbus.log` covers M1–M10
+(train HRs/coils + M10 switch throw), `mqtt_publish.log` covers S1–S3
+(switch commands + retained-topic recon + LWT-driven liveness).
 
 `CHOOCHOO_HUB_NAME` defaults to `Smart Hub` (the factory default). If the
 hub was renamed via the Lego Powered Up app, set this to the exact
@@ -598,12 +847,23 @@ controller↔train segment recolors to match.
 | HR 1 | Holding reg | Light brightness 0..10 |
 | HR 2 | Holding reg | Operator-incremented command counter |
 | Coil 0 | Coil | Emergency stop (write True to trip; latches back) |
+| Coil 1 | Coil | Switch: throw to straight (write True; latches back) |
+| Coil 2 | Coil | Switch: throw to curve (write True; latches back) |
 | IR 0 | Input reg | Current commanded power 0..100 |
 | IR 1 | Input reg | MAX_POWER constant |
 | DI 0 | Discrete input | Train connected |
 | DI 1 | Discrete input | Direction (0 = reverse, 1 = forward) |
+| DI 2 | Discrete input | Switch position = straight (0 if unknown / mid-throw) |
+| DI 3 | Discrete input | Switch position = curve (0 if unknown / mid-throw) |
+| DI 4 | Discrete input | Switch controller online (LWT-driven; 0 if never seen) |
 
 Unit ID `1`. No auth, no TLS — same baseline posture as MQTT mode.
+
+The switch coils/DIs are populated by the Modbus outstation acting as an
+MQTT client to the switch broker (a bridge from OT to IoT that mirrors
+how a real rail HMI unifies protocols). Env vars: `CHOOCHOO_SWITCH_BROKER`
+(default `localhost`), `CHOOCHOO_SWITCH_BROKER_PORT` (default `1883`),
+`CHOOCHOO_SWITCH_ID` (default `sw1`).
 
 ## Topics
 
@@ -612,6 +872,87 @@ Unit ID `1`. No auth, no TLS — same baseline posture as MQTT mode.
 - `choochoo/train/<train_id>/cmd/light` — `{"brightness": 0-10}`
 - `choochoo/train/<train_id>/state` — retained; current direction / power / connection
 - `choochoo/train/<train_id>/discovery` — retained; device manifest (auto-discovery)
+
+### Track switch (BLE via Circuit Cubes)
+
+A second BLE device — a Circuit Cubes Bluetooth Bit — drives a Lego
+gear-rack track switch. The switch controller is a separate process that
+runs alongside the train controller; both share the same broker. The
+switch is reachable from three surfaces (MQTT, Modbus coil, web button)
+and all three end up at the same BLE frame on the wire.
+
+**Topics** (`choochoo/switch/<switch_id>/…`):
+
+| Topic | Retained? | Direction | Payload |
+|---|---|---|---|
+| `cmd/throw` | no | publisher → controller | `{"action":"throw","direction":"forward|reverse"}` |
+| `state` | **yes** | controller → subscribers | `SwitchState` — position, connected, last_throw_ts, cooldown_until_ts |
+| `event` | no | controller → subscribers | `ThrowEvent` — direction + outcome (`ok` / `cooldown_rejected` / `ble_error`) + ts |
+| `discovery` | **yes** | controller → subscribers | `SwitchDiscovery` — capabilities + safety envelope + `online` flag. LWT-driven. |
+
+**Motor safety.** The switch motor burns out if held on. The controller
+enforces a bounded-burst timer (250 ms) at fixed power (130/255), plus a
+2 s cooldown per switch. Values live as constants in `switch_protocol.py`
+— retune if your gear ratio, rack length, or motor differs from the
+reference sw1 setup. Every code path that writes a start frame guarantees
+a stop frame via `try/finally`, so an interrupted throw still stops the
+motor.
+
+**Controller liveness — `discovery.online` vs `state.connected`.** The
+controller publishes two retained payloads with overlapping-looking
+booleans:
+
+- `discovery.online` — set to `true` on the controller's initial connect,
+  and the controller registers a Last Will & Testament with the broker
+  that flips it to `false` on ungraceful disconnect. This is the
+  **authoritative controller-liveness signal**. Both the web UI's pill
+  and the Modbus `DI_SWITCH_ONLINE` DI read it.
+- `state.connected` — a payload field the controller writes about **its
+  own BLE link to the Cube**. It's whatever the controller last published;
+  when the controller dies uncleanly, the retained value stays true forever.
+  Do NOT use this to decide whether the controller is alive.
+
+**3-gear inversion.** The mechanism has 3 gears between the motor and
+the rack, so motor direction is inverted at the rack. On the wire,
+`direction: "forward"` throws the switch to the **Straight** position,
+and `direction: "reverse"` throws to **Curve**. Every planned switch
+uses this mechanism; the mapping is a fixed system invariant. The web
+UI and Modbus outstation both know about it and label buttons/coils
+accordingly (`Throw to Straight` ↔ coil 1 ↔ wire `forward`).
+
+Run bare-metal alongside the train controller (BLE is host-only):
+
+```sh
+CHOOCHOO_SWITCH_KIND=circuit_cube \
+CHOOCHOO_CUBE_NAME=Tenka \
+CHOOCHOO_CUBE_PORT=a \
+    uv run choochoo -v switch-controller
+```
+
+Ad-hoc throw from any host:
+
+```sh
+# Wire direction (matches the MQTT payload).
+uv run choochoo switch-send throw forward   # → Straight (rack backward)
+uv run choochoo switch-send throw reverse   # → Curve (rack forward)
+```
+
+**Modbus surface (M10).** The Modbus outstation also carries the switch.
+Coils 1 (`throw to straight`) and 2 (`throw to curve`) are edge-triggered
+throw commands; DIs 2/3/4 mirror position + controller online. The
+outstation subscribes to the same MQTT topics as the web bridge and
+publishes ThrowCommands on coil writes — a Modbus master doesn't need
+to speak MQTT to throw the switch. See `VULNERABILITIES.md` (M10) for
+the attack pattern and Zeek detection hooks.
+
+**Deferred: BLE stale-handle reconnect.** After long idle periods on
+macOS (~5 h observed), `bleak`'s cached service handles go stale and
+the next `write_gatt_char` raises "Service Discovery has not been
+performed yet". The throw returns `outcome: "ble_error"`, and the
+controller doesn't currently reconnect on its own. Workaround: restart
+the switch controller (`Ctrl-C`, re-run the command above). See the
+"Deferred" section of `docs/superpowers/specs/2026-07-27-modbus-switch-surface.md`
+for the proper fix.
 
 ## Security posture
 

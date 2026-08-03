@@ -1,29 +1,44 @@
 # Real-train (hardware) demo: web / broker / defender tooling run in
-# containers; the *controller* runs bare-metal on whichever host owns
-# the BLE radio (Mac with Bluetooth permission, or a Pi). Docker Desktop
-# on macOS has no BLE passthrough, and on Linux it would need
-# --privileged + host networking. Keeping the controller off Docker also
-# matches the deploy story in deploy/choochoo-controller.service.
+# containers; the *controllers* (train + switch) run bare-metal on the
+# host that owns the BLE radios. Docker Desktop on macOS has no BLE
+# passthrough, and on Linux BLE-in-container needs --privileged + host
+# networking. Keeping the controllers off Docker also matches the
+# deploy story in deploy/choochoo-{,switch-}controller.service.
 #
-# Pick a control-plane profile:
+# --- Event configuration (Modbus train + MQTT switch) --------------------
 #
-#   docker compose -f docker-compose.real.yml --profile mqtt   up -d
-#   docker compose -f docker-compose.real.yml --profile modbus up -d
+# On the Pi (or Mac):
 #
-# Then on the host that owns BLE (this Mac), launch the controller:
+#   1. Install systemd units:
+#        ./scripts/pi-setup.sh
+#   2. Edit the two env files:
+#        sudo $EDITOR /etc/choochoo/controller.env         # CHOOCHOO_TRAIN etc.
+#        sudo $EDITOR /etc/choochoo/switch-controller.env  # CHOOCHOO_CUBE_NAME etc.
+#   3. Enable + start both units:
+#        sudo systemctl enable --now choochoo-controller choochoo-switch-controller
+#   4. Bring up the containerized surfaces:
+#        docker compose -f docker-compose.real.yml \
+#            --profile modbus --profile mqtt up -d
 #
-#   # MQTT
+# `--profile modbus` starts web-modbus (the operator's HMI). `--profile
+# mqtt` starts mosquitto so the switch controller has a broker to talk
+# to. Both are required for the event; the profiles are separate so
+# each can be brought up standalone for dev/debug.
+#
+# --- Legacy MQTT-train demo ----------------------------------------------
+# Stack `--profile legacy-web` to also run the (deprecated) MQTT-flavored
+# web UI. Port 8000 collides with web-modbus so pick one:
+#
+#   docker compose -f docker-compose.real.yml --profile mqtt --profile legacy-web up -d
+#
+# Then on the host, run the MQTT (not Modbus) train controller manually:
 #   CHOOCHOO_TRAIN=buwizz CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
 #     CHOOCHOO_BROKER=localhost \
 #     uv run choochoo -v controller
 #
-#   # Modbus (outstation binds 0.0.0.0:5020 on the host)
-#   CHOOCHOO_PROTOCOL=modbus CHOOCHOO_TRAIN=buwizz CHOOCHOO_BUWIZZ_NAME='BuWizz3' \
-#     uv run choochoo -v controller
-#
-# The web UI is at http://localhost:8000. Stack `--profile attacker`,
-# `--profile noise`, `--profile sensor`, `--profile gravwell` the same
-# way as in docker-compose.fake.yml.
+# --- Defender / attacker stack -------------------------------------------
+# Stack `--profile attacker`, `--profile noise`, `--profile sensor`,
+# `--profile gravwell` the same way as in docker-compose.fake.yml.
 
 services:
   # --- MQTT profile --------------------------------------------------------
@@ -41,6 +56,11 @@ services:
     profiles: [mqtt]
     restart: unless-stopped
 
+  # Legacy MQTT-flavored web UI. Not part of the ChooChoo event
+  # configuration (the event runs Modbus for the train). Kept for
+  # demonstrating the V-series IoT vulnerabilities against the legacy
+  # MQTT train controller. Under a separate profile so it doesn't
+  # collide with web-modbus on host port 8000.
   web-mqtt:
     image: choochoo:dev
     build:
@@ -56,7 +76,7 @@ services:
       CHOOCHOO_BROKER_PORT: "1883"
     depends_on:
       - mosquitto
-    profiles: [mqtt]
+    profiles: [legacy-web]
     restart: unless-stopped
 
   # --- Modbus profile ------------------------------------------------------
@@ -73,10 +93,17 @@ services:
       - "8000:8000"
     command: ["web", "--http-port", "8000"]
     environment:
+      # Train side: talk Modbus to the bare-metal outstation on the host.
       CHOOCHOO_PROTOCOL: modbus
       CHOOCHOO_TRAIN_ID: t1
       CHOOCHOO_BROKER: host.docker.internal
       CHOOCHOO_MODBUS_PORT: "5020"
+      # Switch side: talk MQTT to mosquitto (inside the compose network).
+      # Only takes effect when --profile mqtt is also active. Under the
+      # event configuration both profiles are up.
+      CHOOCHOO_SWITCH_BROKER: mosquitto
+      CHOOCHOO_SWITCH_BROKER_PORT: "1883"
+      CHOOCHOO_SWITCH_ID: sw1
     extra_hosts:
       - "host.docker.internal:host-gateway"
     profiles: [modbus]
