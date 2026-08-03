@@ -612,7 +612,17 @@ Same `--profile` flags as `.fake.yml`:
 ```sh
 docker compose -f docker-compose.real.yml \
     --profile modbus --profile mqtt \
-    --profile attacker --profile noise up -d
+    --profile attacker up -d
+```
+
+On the physical RaspPi box:
+```sh
+./scripts/noise-scripts/start.sh
+```
+
+And to tear down:
+```sh
+./scripts/noise-scripts/stop.sh
 ```
 
 Caveat for **Modbus + Zeek**: the outstation lives on the host, not
