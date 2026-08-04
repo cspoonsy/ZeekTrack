@@ -173,10 +173,10 @@
         "renderer": "chart",
         "hideZoom": true,
         "span": {
-          "col": 3,
+          "col": 4,
           "row": 6,
           "x": 0,
-          "y": 0
+          "y": 10
         },
         "searchesIndex": 0,
         "rendererOptions": {
@@ -203,10 +203,10 @@
         "renderer": "chart",
         "hideZoom": true,
         "span": {
-          "col": 3,
+          "col": 4,
           "row": 6,
-          "x": 3,
-          "y": 0
+          "x": 4,
+          "y": 10
         },
         "searchesIndex": 1,
         "rendererOptions": {
@@ -235,10 +235,10 @@
         "renderer": "table",
         "hideZoom": true,
         "span": {
-          "col": 3,
+          "col": 4,
           "row": 6,
-          "x": 6,
-          "y": 0
+          "x": 8,
+          "y": 62
         },
         "searchesIndex": 2,
         "rendererOptions": {}
@@ -249,10 +249,10 @@
         "renderer": "table",
         "hideZoom": true,
         "span": {
-          "col": 3,
+          "col": 6,
           "row": 6,
-          "x": 9,
-          "y": 0
+          "x": 6,
+          "y": 44
         },
         "searchesIndex": 10,
         "rendererOptions": {}
@@ -266,7 +266,7 @@
           "col": 12,
           "row": 6,
           "x": 0,
-          "y": 6
+          "y": 4
         },
         "searchesIndex": 9,
         "rendererOptions": {
@@ -300,10 +300,10 @@
         "renderer": "table",
         "hideZoom": true,
         "span": {
-          "col": 6,
-          "row": 6,
+          "col": 4,
+          "row": 8,
           "x": 0,
-          "y": 12
+          "y": 16
         },
         "searchesIndex": 4,
         "rendererOptions": {}
@@ -314,10 +314,10 @@
         "renderer": "table",
         "hideZoom": true,
         "span": {
-          "col": 6,
-          "row": 6,
-          "x": 6,
-          "y": 12
+          "col": 4,
+          "row": 8,
+          "x": 4,
+          "y": 16
         },
         "searchesIndex": 5,
         "rendererOptions": {}
@@ -328,10 +328,10 @@
         "renderer": "numbercard",
         "hideZoom": true,
         "span": {
-          "col": 4,
-          "row": 3,
-          "x": 0,
-          "y": 18
+          "col": 2,
+          "row": 4,
+          "x": 10,
+          "y": 0
         },
         "searchesIndex": 6,
         "rendererOptions": {}
@@ -342,10 +342,10 @@
         "renderer": "chart",
         "hideZoom": false,
         "span": {
-          "col": 8,
-          "row": 6,
-          "x": 4,
-          "y": 18
+          "col": 4,
+          "row": 8,
+          "x": 8,
+          "y": 16
         },
         "searchesIndex": 11,
         "rendererOptions": {
@@ -382,7 +382,7 @@
           "col": 4,
           "row": 6,
           "x": 0,
-          "y": 21
+          "y": 30
         },
         "searchesIndex": 7,
         "rendererOptions": {
@@ -419,7 +419,7 @@
           "col": 4,
           "row": 6,
           "x": 4,
-          "y": 24
+          "y": 30
         },
         "searchesIndex": 8,
         "rendererOptions": {
@@ -456,7 +456,7 @@
           "col": 4,
           "row": 6,
           "x": 8,
-          "y": 24
+          "y": 10
         },
         "searchesIndex": 3,
         "rendererOptions": {}
@@ -468,9 +468,9 @@
         "hideZoom": true,
         "span": {
           "col": 2,
-          "row": 3,
-          "x": 0,
-          "y": 27
+          "row": 4,
+          "x": 4,
+          "y": 0
         },
         "searchesIndex": 12,
         "rendererOptions": {}
@@ -482,9 +482,9 @@
         "hideZoom": true,
         "span": {
           "col": 2,
-          "row": 3,
-          "x": 2,
-          "y": 27
+          "row": 4,
+          "x": 6,
+          "y": 0
         },
         "searchesIndex": 13,
         "rendererOptions": {}
@@ -497,8 +497,8 @@
         "span": {
           "col": 2,
           "row": 4,
-          "x": 0,
-          "y": 30
+          "x": 2,
+          "y": 0
         },
         "searchesIndex": 14,
         "rendererOptions": {}
@@ -511,8 +511,8 @@
         "span": {
           "col": 2,
           "row": 4,
-          "x": 2,
-          "y": 30
+          "x": 0,
+          "y": 0
         },
         "searchesIndex": 15,
         "rendererOptions": {}
@@ -524,9 +524,9 @@
         "hideZoom": true,
         "span": {
           "col": 4,
-          "row": 4,
-          "x": 4,
-          "y": 30
+          "row": 6,
+          "x": 0,
+          "y": 24
         },
         "searchesIndex": 16,
         "rendererOptions": {
@@ -560,10 +560,10 @@
         "renderer": "chart",
         "hideZoom": true,
         "span": {
-          "col": 4,
-          "row": 4,
-          "x": 8,
-          "y": 30
+          "col": 6,
+          "row": 6,
+          "x": 0,
+          "y": 44
         },
         "searchesIndex": 17,
         "rendererOptions": {
@@ -591,9 +591,9 @@
         "hideZoom": true,
         "span": {
           "col": 4,
-          "row": 4,
-          "x": 0,
-          "y": 34
+          "row": 6,
+          "x": 4,
+          "y": 24
         },
         "searchesIndex": 18,
         "rendererOptions": {
@@ -623,9 +623,9 @@
         "hideZoom": true,
         "span": {
           "col": 4,
-          "row": 4,
-          "x": 4,
-          "y": 34
+          "row": 6,
+          "x": 8,
+          "y": 24
         },
         "searchesIndex": 19,
         "rendererOptions": {}
@@ -637,9 +637,9 @@
         "hideZoom": true,
         "span": {
           "col": 4,
-          "row": 4,
+          "row": 6,
           "x": 8,
-          "y": 34
+          "y": 30
         },
         "searchesIndex": 20,
         "rendererOptions": {
@@ -669,7 +669,7 @@
           "col": 4,
           "row": 6,
           "x": 0,
-          "y": 38
+          "y": 56
         },
         "searchesIndex": 21,
         "rendererOptions": {}
@@ -683,7 +683,7 @@
           "col": 4,
           "row": 6,
           "x": 4,
-          "y": 38
+          "y": 56
         },
         "searchesIndex": 22,
         "rendererOptions": {
@@ -716,7 +716,7 @@
           "col": 4,
           "row": 6,
           "x": 8,
-          "y": 38
+          "y": 56
         },
         "searchesIndex": 23,
         "rendererOptions": {}
@@ -727,10 +727,10 @@
         "renderer": "numbercard",
         "hideZoom": true,
         "span": {
-          "x": 0,
-          "y": 44,
           "col": 2,
-          "row": 4
+          "row": 4,
+          "x": 8,
+          "y": 0
         },
         "searchesIndex": 24,
         "rendererOptions": {}
@@ -741,10 +741,10 @@
         "renderer": "chart",
         "hideZoom": false,
         "span": {
-          "x": 2,
-          "y": 44,
           "col": 8,
-          "row": 4
+          "row": 6,
+          "x": 0,
+          "y": 50
         },
         "searchesIndex": 25,
         "rendererOptions": {
@@ -770,10 +770,10 @@
         "renderer": "table",
         "hideZoom": false,
         "span": {
-          "x": 10,
-          "y": 44,
-          "col": 2,
-          "row": 4
+          "col": 4,
+          "row": 6,
+          "x": 8,
+          "y": 50
         },
         "searchesIndex": 26,
         "rendererOptions": {}
@@ -784,10 +784,10 @@
         "renderer": "table",
         "hideZoom": false,
         "span": {
-          "x": 0,
-          "y": 48,
           "col": 6,
-          "row": 6
+          "row": 8,
+          "x": 0,
+          "y": 36
         },
         "searchesIndex": 27,
         "rendererOptions": {}
@@ -798,10 +798,10 @@
         "renderer": "table",
         "hideZoom": false,
         "span": {
-          "x": 6,
-          "y": 48,
           "col": 6,
-          "row": 6
+          "row": 8,
+          "x": 6,
+          "y": 36
         },
         "searchesIndex": 28,
         "rendererOptions": {}
@@ -812,10 +812,10 @@
         "renderer": "chart",
         "hideZoom": true,
         "span": {
-          "col": 10,
-          "row": 4,
+          "col": 8,
+          "row": 6,
           "x": 0,
-          "y": 54
+          "y": 62
         },
         "searchesIndex": 29,
         "rendererOptions": {
@@ -828,10 +828,10 @@
         "renderer": "text",
         "hideZoom": true,
         "span": {
-          "col": 6,
+          "col": 12,
           "row": 4,
-          "x": 10,
-          "y": 54
+          "x": 0,
+          "y": 68
         },
         "searchesIndex": 30,
         "rendererOptions": {}
