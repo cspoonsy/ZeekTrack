@@ -1,6 +1,692 @@
 {
   "Name": "ChooChoo \u2014 SOC Overview",
   "Description": "General SOC-style view: network pulse, protocol mix, top talkers, MQTT/Modbus/HTTP activity",
-  "Data": "{\"timeframe\": {\"durationString\": null, \"timeframe\": \"PT1H\", \"timezone\": null, \"start\": null, \"end\": null}, \"searches\": [{\"alias\": \"total_conns\", \"query\": \"tag=corelight_conn | count | numbercard count\", \"color\": null}, {\"alias\": \"unique_ips\", \"query\": \"tag=corelight_conn | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" | unique \\\"id.orig_h\\\" | count | numbercard count\", \"color\": null}, {\"alias\": \"protocol_mix\", \"query\": \"tag=corelight grep \\\"{\\\" | json \\\"_path\\\" as path | count by path over 1h | chart count by path\", \"color\": null}, {\"alias\": \"conns_over_time\", \"query\": \"tag=corelight_conn | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" | count by \\\"id.orig_h\\\" over 30s | chart count by \\\"id.orig_h\\\"\", \"color\": null}, {\"alias\": \"top_talkers\", \"query\": \"tag=corelight_conn | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" | count by \\\"id.orig_h\\\" over 30s | chart count by \\\"id.orig_h\\\"\", \"color\": null}, {\"alias\": \"mqtt_activity\", \"query\": \"tag=corelight_mqtt_connect | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" | count by \\\"id.orig_h\\\" over 30s | chart count by \\\"id.orig_h\\\"\", \"color\": null}, {\"alias\": \"modbus_activity\", \"query\": \"tag=corelight_modbus | grep \\\"\\\\\\\"pdu_type\\\\\\\":\\\\\\\"REQ\\\\\\\"\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" | count by \\\"id.orig_h\\\" over 30s | chart count by \\\"id.orig_h\\\"\", \"color\": null}, {\"alias\": \"mqtt_subs\", \"query\": \"tag=corelight_mqtt_subscribe | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" topics | table \\\"id.orig_h\\\" topics\", \"color\": null}, {\"alias\": \"http_requests\", \"query\": \"tag=corelight_http | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" method uri user_agent | table \\\"id.orig_h\\\" method uri user_agent\", \"color\": null}, {\"alias\": \"dest_ports\", \"query\": \"tag=corelight_conn | json \\\"id.resp_p\\\" service | count by \\\"id.resp_p\\\" service | table \\\"id.resp_p\\\" service count\", \"color\": null}, {\"alias\": \"top_destinations\", \"query\": \"tag=corelight_conn | json \\\"id.resp_h\\\" \\\"id.resp_p\\\" service | count by \\\"id.resp_h\\\" \\\"id.resp_p\\\" | sort by count desc | table \\\"id.resp_h\\\" \\\"id.resp_p\\\" count\", \"color\": null}, {\"alias\": \"http_hosts\", \"query\": \"tag=corelight_http | json host \\\"id.orig_h\\\" | count by host \\\"id.orig_h\\\" | sort by count desc | table \\\"id.orig_h\\\" host count\", \"color\": null}, {\"alias\": \"byte_asymmetry\", \"query\": \"tag=corelight_conn | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" orig_bytes resp_bytes | sum orig_bytes by \\\"id.orig_h\\\" | table \\\"id.orig_h\\\" sum\", \"color\": null}, {\"alias\": \"anon_mqtt_clients\", \"query\": \"tag=corelight_mqtt_connect | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" client_id | count by \\\"id.orig_h\\\" | table \\\"id.orig_h\\\" count\", \"color\": null}, {\"alias\": \"conn_state_pie\", \"query\": \"tag=corelight_conn | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json conn_state | count by conn_state over 1h | chart count by conn_state\", \"color\": null}, {\"alias\": \"protocol_pie\", \"query\": \"tag=corelight grep \\\"{\\\" | json \\\"_path\\\" as path | count by path over 1h | chart count by path\", \"color\": null}, {\"alias\": \"dest_port_bar\", \"query\": \"tag=corelight_conn | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.resp_p\\\" | count by \\\"id.resp_p\\\" over 1h | chart count by \\\"id.resp_p\\\"\", \"color\": null}, {\"alias\": \"mqtt_topic_pie\", \"query\": \"tag=corelight_mqtt_publish | grep \\\"\\\\\\\"from_client\\\\\\\":true\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json topic | count by topic over 1h | chart count by topic\", \"color\": null}, {\"alias\": \"modbus_func_pie\", \"query\": \"tag=corelight_modbus | grep \\\"\\\\\\\"pdu_type\\\\\\\":\\\\\\\"REQ\\\\\\\"\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json func | count by func over 1h | chart count by func\", \"color\": null}, {\"alias\": \"http_method_pie\", \"query\": \"tag=corelight_http | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json method | count by method over 1h | chart count by method\", \"color\": null}, {\"alias\": \"ot_alerts_soc\", \"query\": \"tag=corelight_notice | count | numbercard count\", \"color\": null}, {\"alias\": \"ot_notice_rate_soc\", \"query\": \"tag=corelight_notice | json note | count by note over 5m | chart count by note\", \"color\": null}, {\"alias\": \"ot_notice_type_breakdown\", \"query\": \"tag=corelight_notice | json note | stats count by note | sort by count desc | table note count\", \"color\": null}, {\"alias\": \"switch_notices\", \"query\": \"tag=corelight grep \\\"SwitchThrow\\\" | json note msg src | table note msg src\", \"color\": null}], \"tiles\": [{\"id\": 1, \"title\": \"Total Connections\", \"renderer\": \"numbercard\", \"hideZoom\": true, \"span\": {\"col\": 3, \"row\": 3, \"x\": 0, \"y\": 0}, \"searchesIndex\": 0, \"rendererOptions\": {}}, {\"id\": 2, \"title\": \"Unique Source IPs\", \"renderer\": \"numbercard\", \"hideZoom\": true, \"span\": {\"col\": 3, \"row\": 3, \"x\": 3, \"y\": 0}, \"searchesIndex\": 1, \"rendererOptions\": {}}, {\"id\": 3, \"title\": \"Protocol Mix\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 6, \"row\": 3, \"x\": 6, \"y\": 0}, \"searchesIndex\": 2, \"rendererOptions\": {\"chartType\": \"bar\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 4, \"title\": \"Network Activity Over Time\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 8, \"row\": 4, \"x\": 0, \"y\": 3}, \"searchesIndex\": 3, \"rendererOptions\": {\"chartType\": \"area\", \"Stack\": \"grouped\", \"Smoothing\": \"normal\", \"Orientation\": \"v\", \"XAxisSplitLine\": \"no\", \"YAxisSplitLine\": \"no\", \"IncludeOther\": \"yes\", \"ConnectNulls\": \"yes\", \"LogScale\": \"no\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 5, \"title\": \"Top Talkers\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 4, \"x\": 8, \"y\": 3}, \"searchesIndex\": 4, \"rendererOptions\": {\"chartType\": \"bar\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 6, \"title\": \"MQTT Connections Over Time\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 6, \"row\": 4, \"x\": 0, \"y\": 7}, \"searchesIndex\": 5, \"rendererOptions\": {\"chartType\": \"area\", \"Stack\": \"grouped\", \"Smoothing\": \"normal\", \"Orientation\": \"v\", \"XAxisSplitLine\": \"no\", \"YAxisSplitLine\": \"no\", \"IncludeOther\": \"yes\", \"ConnectNulls\": \"yes\", \"LogScale\": \"no\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 7, \"title\": \"Modbus Requests Over Time\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 6, \"row\": 4, \"x\": 6, \"y\": 7}, \"searchesIndex\": 6, \"rendererOptions\": {\"chartType\": \"area\", \"Stack\": \"grouped\", \"Smoothing\": \"normal\", \"Orientation\": \"v\", \"XAxisSplitLine\": \"no\", \"YAxisSplitLine\": \"no\", \"IncludeOther\": \"yes\", \"ConnectNulls\": \"yes\", \"LogScale\": \"no\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 8, \"title\": \"MQTT Subscriptions\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 6, \"row\": 4, \"x\": 0, \"y\": 11}, \"searchesIndex\": 7, \"rendererOptions\": {}}, {\"id\": 9, \"title\": \"HTTP Requests\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 6, \"row\": 4, \"x\": 6, \"y\": 11}, \"searchesIndex\": 8, \"rendererOptions\": {}}, {\"id\": 10, \"title\": \"Destination Ports & Services\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 12, \"row\": 3, \"x\": 0, \"y\": 15}, \"searchesIndex\": 9, \"rendererOptions\": {}}, {\"id\": 11, \"title\": \"Top Destinations (IP:Port)\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 6, \"row\": 4, \"x\": 0, \"y\": 18}, \"searchesIndex\": 10, \"rendererOptions\": {}}, {\"id\": 12, \"title\": \"HTTP Host Connections\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 6, \"row\": 4, \"x\": 6, \"y\": 18}, \"searchesIndex\": 11, \"rendererOptions\": {}}, {\"id\": 13, \"title\": \"TX vs RX Bytes per IP\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 6, \"row\": 4, \"x\": 0, \"y\": 22}, \"searchesIndex\": 12, \"rendererOptions\": {}}, {\"id\": 14, \"title\": \"Anonymous MQTT Sessions (no client_id)\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 6, \"row\": 4, \"x\": 6, \"y\": 22}, \"searchesIndex\": 13, \"rendererOptions\": {}}, {\"id\": 15, \"title\": \"Connection Outcomes \\u2014 Distribution\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 5, \"x\": 0, \"y\": 26}, \"searchesIndex\": 14, \"rendererOptions\": {\"chartType\": \"bar\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 16, \"title\": \"Log Type Distribution\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 5, \"x\": 4, \"y\": 26}, \"searchesIndex\": 15, \"rendererOptions\": {\"chartType\": \"pie\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 17, \"title\": \"Destination Ports \\u2014 Activity\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 5, \"x\": 8, \"y\": 26}, \"searchesIndex\": 16, \"rendererOptions\": {\"chartType\": \"pie\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 18, \"title\": \"MQTT Topic Distribution\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 5, \"x\": 0, \"y\": 31}, \"searchesIndex\": 17, \"rendererOptions\": {\"chartType\": \"bar\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 19, \"title\": \"Modbus Function Breakdown\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 5, \"x\": 4, \"y\": 31}, \"searchesIndex\": 18, \"rendererOptions\": {\"chartType\": \"bar\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 20, \"title\": \"HTTP Methods Distribution\", \"renderer\": \"chart\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 5, \"x\": 8, \"y\": 31}, \"searchesIndex\": 19, \"rendererOptions\": {\"chartType\": \"pie\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 21, \"title\": \"Security Alerts \\u2014 total OT/ICS notices\", \"renderer\": \"numbercard\", \"hideZoom\": true, \"span\": {\"x\": 0, \"y\": 36, \"col\": 3, \"row\": 6}, \"searchesIndex\": 20, \"rendererOptions\": {}}, {\"id\": 22, \"title\": \"Alert Rate by Detection Type\", \"renderer\": \"chart\", \"hideZoom\": false, \"span\": {\"x\": 3, \"y\": 36, \"col\": 6, \"row\": 6}, \"searchesIndex\": 21, \"rendererOptions\": {\"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 23, \"title\": \"Notice Type Breakdown\", \"renderer\": \"table\", \"hideZoom\": false, \"span\": {\"x\": 9, \"y\": 36, \"col\": 3, \"row\": 6}, \"searchesIndex\": 22, \"rendererOptions\": {}}, {\"id\": 24, \"title\": \"Switch Notices \\u2014 SwitchThrow* detection events\", \"renderer\": \"text\", \"hideZoom\": true, \"span\": {\"col\": 8, \"row\": 4, \"x\": 0, \"y\": 42}, \"searchesIndex\": 23, \"rendererOptions\": {}}], \"linkZooming\": false, \"grid\": {}, \"version\": 2}",
+  "Data": {
+    "timeframe": {
+      "durationString": null,
+      "timeframe": "PT1H",
+      "timezone": null,
+      "start": null,
+      "end": null
+    },
+    "searches": [
+      {
+        "alias": "total_conns",
+        "query": "tag=corelight_conn | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "unique_ips",
+        "query": "tag=corelight_conn | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | unique \"id.orig_h\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "protocol_mix",
+        "query": "tag=corelight grep \"{\" | json \"_path\" as path | count by path over 1h | chart count by path",
+        "color": null
+      },
+      {
+        "alias": "conns_over_time",
+        "query": "tag=corelight_conn | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "top_talkers",
+        "query": "tag=corelight_conn | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "mqtt_activity",
+        "query": "tag=corelight_mqtt_connect | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "modbus_activity",
+        "query": "tag=corelight_modbus | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "mqtt_subs",
+        "query": "tag=corelight_mqtt_subscribe | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" topics | table \"id.orig_h\" topics",
+        "color": null
+      },
+      {
+        "alias": "http_requests",
+        "query": "tag=corelight_http | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" method uri user_agent | table \"id.orig_h\" method uri user_agent",
+        "color": null
+      },
+      {
+        "alias": "dest_ports",
+        "query": "tag=corelight_conn | json \"id.resp_p\" service | count by \"id.resp_p\" service | table \"id.resp_p\" service count",
+        "color": null
+      },
+      {
+        "alias": "top_destinations",
+        "query": "tag=corelight_conn | json \"id.resp_h\" \"id.resp_p\" service | count by \"id.resp_h\" \"id.resp_p\" | sort by count desc | table \"id.resp_h\" \"id.resp_p\" count",
+        "color": null
+      },
+      {
+        "alias": "http_hosts",
+        "query": "tag=corelight_http | json host \"id.orig_h\" | count by host \"id.orig_h\" | sort by count desc | table \"id.orig_h\" host count",
+        "color": null
+      },
+      {
+        "alias": "byte_asymmetry",
+        "query": "tag=corelight_conn | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" orig_bytes resp_bytes | sum orig_bytes by \"id.orig_h\" | table \"id.orig_h\" sum",
+        "color": null
+      },
+      {
+        "alias": "anon_mqtt_clients",
+        "query": "tag=corelight_mqtt_connect | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" client_id | count by \"id.orig_h\" | table \"id.orig_h\" count",
+        "color": null
+      },
+      {
+        "alias": "conn_state_pie",
+        "query": "tag=corelight_conn | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json conn_state | count by conn_state over 1h | chart count by conn_state",
+        "color": null
+      },
+      {
+        "alias": "protocol_pie",
+        "query": "tag=corelight grep \"{\" | json \"_path\" as path | count by path over 1h | chart count by path",
+        "color": null
+      },
+      {
+        "alias": "dest_port_bar",
+        "query": "tag=corelight_conn | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.resp_p\" | count by \"id.resp_p\" over 1h | chart count by \"id.resp_p\"",
+        "color": null
+      },
+      {
+        "alias": "mqtt_topic_pie",
+        "query": "tag=corelight_mqtt_publish | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json topic | count by topic over 1h | chart count by topic",
+        "color": null
+      },
+      {
+        "alias": "modbus_func_pie",
+        "query": "tag=corelight_modbus | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json func | count by func over 1h | chart count by func",
+        "color": null
+      },
+      {
+        "alias": "http_method_pie",
+        "query": "tag=corelight_http | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json method | count by method over 1h | chart count by method",
+        "color": null
+      },
+      {
+        "alias": "ot_alerts_soc",
+        "query": "tag=corelight_notice | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "ot_notice_rate_soc",
+        "query": "tag=corelight_notice | json note | count by note over 5m | chart count by note",
+        "color": null
+      },
+      {
+        "alias": "ot_notice_type_breakdown",
+        "query": "tag=corelight_notice | json note | stats count by note | sort by count desc | table note count",
+        "color": null
+      },
+      {
+        "alias": "switch_notices",
+        "query": "tag=corelight grep \"SwitchThrow\" | json note msg src | table note msg src",
+        "color": null
+      }
+    ],
+    "tiles": [
+      {
+        "id": 1,
+        "title": "Total Connections",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 3,
+          "row": 3,
+          "x": 0,
+          "y": 0
+        },
+        "searchesIndex": 0,
+        "rendererOptions": {}
+      },
+      {
+        "id": 2,
+        "title": "Unique Source IPs",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 3,
+          "row": 3,
+          "x": 3,
+          "y": 0
+        },
+        "searchesIndex": 1,
+        "rendererOptions": {}
+      },
+      {
+        "id": 3,
+        "title": "Protocol Mix",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 3,
+          "x": 6,
+          "y": 0
+        },
+        "searchesIndex": 2,
+        "rendererOptions": {
+          "chartType": "bar",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 4,
+        "title": "Network Activity Over Time",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 8,
+          "row": 4,
+          "x": 0,
+          "y": 3
+        },
+        "searchesIndex": 3,
+        "rendererOptions": {
+          "chartType": "area",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "Orientation": "v",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "title": "Top Talkers",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 8,
+          "y": 3
+        },
+        "searchesIndex": 4,
+        "rendererOptions": {
+          "chartType": "bar",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 6,
+        "title": "MQTT Connections Over Time",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 4,
+          "x": 0,
+          "y": 7
+        },
+        "searchesIndex": 5,
+        "rendererOptions": {
+          "chartType": "area",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "Orientation": "v",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 7,
+        "title": "Modbus Requests Over Time",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 4,
+          "x": 6,
+          "y": 7
+        },
+        "searchesIndex": 6,
+        "rendererOptions": {
+          "chartType": "area",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "Orientation": "v",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 8,
+        "title": "MQTT Subscriptions",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 4,
+          "x": 0,
+          "y": 11
+        },
+        "searchesIndex": 7,
+        "rendererOptions": {}
+      },
+      {
+        "id": 9,
+        "title": "HTTP Requests",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 4,
+          "x": 6,
+          "y": 11
+        },
+        "searchesIndex": 8,
+        "rendererOptions": {}
+      },
+      {
+        "id": 10,
+        "title": "Destination Ports & Services",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 12,
+          "row": 3,
+          "x": 0,
+          "y": 15
+        },
+        "searchesIndex": 9,
+        "rendererOptions": {}
+      },
+      {
+        "id": 11,
+        "title": "Top Destinations (IP:Port)",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 4,
+          "x": 0,
+          "y": 18
+        },
+        "searchesIndex": 10,
+        "rendererOptions": {}
+      },
+      {
+        "id": 12,
+        "title": "HTTP Host Connections",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 4,
+          "x": 6,
+          "y": 18
+        },
+        "searchesIndex": 11,
+        "rendererOptions": {}
+      },
+      {
+        "id": 13,
+        "title": "TX vs RX Bytes per IP",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 4,
+          "x": 0,
+          "y": 22
+        },
+        "searchesIndex": 12,
+        "rendererOptions": {}
+      },
+      {
+        "id": 14,
+        "title": "Anonymous MQTT Sessions (no client_id)",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 6,
+          "row": 4,
+          "x": 6,
+          "y": 22
+        },
+        "searchesIndex": 13,
+        "rendererOptions": {}
+      },
+      {
+        "id": 15,
+        "title": "Connection Outcomes \u2014 Distribution",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 5,
+          "x": 0,
+          "y": 26
+        },
+        "searchesIndex": 14,
+        "rendererOptions": {
+          "chartType": "bar",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 16,
+        "title": "Log Type Distribution",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 5,
+          "x": 4,
+          "y": 26
+        },
+        "searchesIndex": 15,
+        "rendererOptions": {
+          "chartType": "pie",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 17,
+        "title": "Destination Ports \u2014 Activity",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 5,
+          "x": 8,
+          "y": 26
+        },
+        "searchesIndex": 16,
+        "rendererOptions": {
+          "chartType": "pie",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 18,
+        "title": "MQTT Topic Distribution",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 5,
+          "x": 0,
+          "y": 31
+        },
+        "searchesIndex": 17,
+        "rendererOptions": {
+          "chartType": "bar",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 19,
+        "title": "Modbus Function Breakdown",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 5,
+          "x": 4,
+          "y": 31
+        },
+        "searchesIndex": 18,
+        "rendererOptions": {
+          "chartType": "bar",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 20,
+        "title": "HTTP Methods Distribution",
+        "renderer": "chart",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 5,
+          "x": 8,
+          "y": 31
+        },
+        "searchesIndex": 19,
+        "rendererOptions": {
+          "chartType": "pie",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 21,
+        "title": "Security Alerts \u2014 total OT/ICS notices",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "x": 0,
+          "y": 36,
+          "col": 3,
+          "row": 6
+        },
+        "searchesIndex": 20,
+        "rendererOptions": {}
+      },
+      {
+        "id": 22,
+        "title": "Alert Rate by Detection Type",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": {
+          "x": 3,
+          "y": 36,
+          "col": 6,
+          "row": 6
+        },
+        "searchesIndex": 21,
+        "rendererOptions": {
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 23,
+        "title": "Notice Type Breakdown",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": {
+          "x": 9,
+          "y": 36,
+          "col": 3,
+          "row": 6
+        },
+        "searchesIndex": 22,
+        "rendererOptions": {}
+      },
+      {
+        "id": 24,
+        "title": "Switch Notices \u2014 SwitchThrow* detection events",
+        "renderer": "text",
+        "hideZoom": true,
+        "span": {
+          "col": 8,
+          "row": 4,
+          "x": 0,
+          "y": 42
+        },
+        "searchesIndex": 23,
+        "rendererOptions": {}
+      }
+    ],
+    "linkZooming": false,
+    "grid": {},
+    "version": 2
+  },
   "Labels": null
 }

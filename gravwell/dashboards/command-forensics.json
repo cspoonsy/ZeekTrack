@@ -1,6 +1,557 @@
 {
   "Name": "ChooChoo \u2014 Command Forensics [1h]",
   "Description": "Deep-dive into commands issued against the train. Modbus writes are the primary attack vector; MQTT handles switch throws and broker recon.",
-  "Data": "{\"timeframe\": {\"durationString\": \"PT1H\", \"timeframe\": \"iso\", \"timezone\": null, \"start\": null, \"end\": null}, \"searches\": [{\"alias\": \"mqtt_publishes\", \"query\": \"tag=corelight_mqtt_publish | grep \\\"\\\\\\\"from_client\\\\\\\":true\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" topic payload | table \\\"id.orig_h\\\" topic payload\", \"color\": null}, {\"alias\": \"topic_timeline\", \"query\": \"tag=corelight_mqtt_publish | grep \\\"\\\\\\\"from_client\\\\\\\":true\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json topic | count by topic over 30s | chart count by topic\", \"color\": null}, {\"alias\": \"retained_msgs\", \"query\": \"tag=corelight_mqtt_publish | grep \\\"\\\\\\\"retain\\\\\\\":true\\\" | json \\\"id.orig_h\\\" topic | table \\\"id.orig_h\\\" topic\", \"color\": null}, {\"alias\": \"modbus_write_count\", \"query\": \"tag=corelight_modbus | grep \\\"\\\\\\\"pdu_type\\\\\\\":\\\\\\\"REQ\\\\\\\"\\\" | grep \\\"\\\\\\\"func\\\\\\\":\\\\\\\"WRITE\\\" | count | numbercard count\", \"color\": null}, {\"alias\": \"modbus_write_rate\", \"query\": \"tag=corelight_modbus | grep \\\"\\\\\\\"pdu_type\\\\\\\":\\\\\\\"REQ\\\\\\\"\\\" | grep \\\"\\\\\\\"func\\\\\\\":\\\\\\\"WRITE\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" func | count by \\\"id.orig_h\\\" over 30s | chart count by \\\"id.orig_h\\\"\", \"color\": null}, {\"alias\": \"modbus_read_rate\", \"query\": \"tag=corelight_modbus | grep \\\"\\\\\\\"pdu_type\\\\\\\":\\\\\\\"REQ\\\\\\\"\\\" | grep \\\"\\\\\\\"func\\\\\\\":\\\\\\\"READ\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" func | count by \\\"id.orig_h\\\" over 30s | chart count by \\\"id.orig_h\\\"\", \"color\": null}, {\"alias\": \"all_modbus\", \"query\": \"tag=corelight_modbus | grep \\\"\\\\\\\"pdu_type\\\\\\\":\\\\\\\"REQ\\\\\\\"\\\" | json \\\"id.orig_h\\\" func unit tid | table \\\"id.orig_h\\\" func unit tid\", \"color\": null}, {\"alias\": \"modbus_exceptions_by_ip\", \"query\": \"tag=corelight_modbus | grep \\\"\\\\\\\"pdu_type\\\\\\\":\\\\\\\"REQ\\\\\\\"\\\" | grep \\\"\\\\\\\"func\\\\\\\":\\\\\\\"EXCEPTION\\\" | json \\\"id.orig_h\\\" func | count by \\\"id.orig_h\\\" func | table \\\"id.orig_h\\\" func count\", \"color\": null}, {\"alias\": \"mqtt_reconnect_rate\", \"query\": \"tag=corelight_mqtt_connect | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" | count by \\\"id.orig_h\\\" over 30s | chart count by \\\"id.orig_h\\\"\", \"color\": null}, {\"alias\": \"mqtt_pub_rate_by_ip\", \"query\": \"tag=corelight_mqtt_publish | grep \\\"\\\\\\\"from_client\\\\\\\":true\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" | count by \\\"id.orig_h\\\" over 30s | chart count by \\\"id.orig_h\\\"\", \"color\": null}, {\"alias\": \"detect_switch_throws\", \"query\": \"tag=corelight_mqtt_publish | grep \\\"\\\\\\\"from_client\\\\\\\":true\\\" | grep \\\"sw1/cmd/throw\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" topic payload | table \\\"id.orig_h\\\" topic payload\", \"color\": null}, {\"alias\": \"detect_modbus_writes\", \"query\": \"tag=corelight_modbus | grep \\\"\\\\\\\"pdu_type\\\\\\\":\\\\\\\"REQ\\\\\\\"\\\" | grep \\\"\\\\\\\"func\\\\\\\":\\\\\\\"WRITE\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" func | table \\\"id.orig_h\\\" func\", \"color\": null}, {\"alias\": \"modbus_writes_detail\", \"query\": \"tag=corelight_modbus | json \\\"id.orig_h\\\" func unit register_start values authorized | sort by TIMESTAMP desc | table \\\"id.orig_h\\\" func unit register_start values authorized\", \"color\": null}, {\"alias\": \"modbus_exceptions_detail\", \"query\": \"tag=corelight_modbus | json \\\"id.orig_h\\\" func unit exception | sort by TIMESTAMP desc | table \\\"id.orig_h\\\" func unit exception\", \"color\": null}, {\"alias\": \"ot_notices_detail\", \"query\": \"tag=corelight_notice | json \\\"id.orig_h\\\" note msg | sort by TIMESTAMP desc | table \\\"id.orig_h\\\" note msg\", \"color\": null}, {\"alias\": \"mqtt_summary_detail\", \"query\": \"tag=corelight_mqtt_publish | json client publish_count subscribe_count distinct_topics bytes_published | sort by publish_count desc | table client publish_count subscribe_count distinct_topics bytes_published\", \"color\": null}, {\"alias\": \"switch_cmd_history\", \"query\": \"tag=corelight grep \\\"switch\\\" grep \\\"cmd/throw\\\" | json \\\"id.orig_h\\\" topic payload | table \\\"id.orig_h\\\" topic payload\", \"color\": null}, {\"alias\": \"switch_recon_then_throw\", \"query\": \"tag=corelight grep \\\"SwitchReconThenThrow\\\" | json note msg src | table note msg src\", \"color\": null}, {\"alias\": \"gauge_modbus_write_vol\", \"query\": \"tag=corelight_modbus | grep \\\"\\\\\\\"pdu_type\\\\\\\":\\\\\\\"REQ\\\\\\\"\\\" | grep \\\"\\\\\\\"func\\\\\\\":\\\\\\\"WRITE\\\" | count | gauge count\", \"color\": null}, {\"alias\": \"switch_throw_count\", \"query\": \"tag=corelight grep \\\"sw1/cmd/throw\\\" | grep \\\"\\\\\\\"from_client\\\\\\\":true\\\" | count | numbercard count\", \"color\": null}, {\"alias\": \"modbus_exception_count\", \"query\": \"tag=corelight_modbus | grep \\\"\\\\\\\"func\\\\\\\":\\\\\\\"EXCEPTION\\\" | count | numbercard count\", \"color\": null}, {\"alias\": \"invalid_payloads\", \"query\": \"tag=corelight_mqtt_publish | grep \\\"\\\\\\\"from_client\\\\\\\":true\\\" | grep \\\"\\\\\\\"topic\\\\\\\":\\\\\\\"choochoo/\\\" | grep -v \\\"\\\\\\\"payload\\\\\\\":\\\\\\\"{\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"fe80\\\" | grep -v \\\"\\\\\\\"id.orig_h\\\\\\\":\\\\\\\"ff02\\\" | json \\\"id.orig_h\\\" topic payload | table \\\"id.orig_h\\\" topic payload\", \"color\": null}], \"tiles\": [{\"id\": 1, \"title\": \"Modbus Writes This Hour\", \"renderer\": \"numbercard\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 4, \"x\": 0, \"y\": 0}, \"searchesIndex\": 3, \"rendererOptions\": {}}, {\"id\": 2, \"title\": \"Switch Throws This Hour\", \"renderer\": \"numbercard\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 4, \"x\": 4, \"y\": 0}, \"searchesIndex\": 19, \"rendererOptions\": {}}, {\"id\": 3, \"title\": \"Modbus Exceptions This Hour\", \"renderer\": \"numbercard\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 4, \"x\": 8, \"y\": 0}, \"searchesIndex\": 20, \"rendererOptions\": {}}, {\"id\": 4, \"title\": \"Modbus Write Volume \\u2014 gauge\", \"renderer\": \"gauge\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 4, \"x\": 12, \"y\": 0}, \"searchesIndex\": 18, \"rendererOptions\": {}}, {\"id\": 5, \"title\": \"Modbus Register Writes \\u2014 every write with register, value, auth status\", \"renderer\": \"table\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 10, \"x\": 0, \"y\": 4}, \"searchesIndex\": 12, \"rendererOptions\": {}}, {\"id\": 6, \"title\": \"Switch Command History \\u2014 all throw commands with source IP\", \"renderer\": \"table\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 10, \"x\": 8, \"y\": 4}, \"searchesIndex\": 16, \"rendererOptions\": {}}, {\"id\": 7, \"title\": \"Modbus Write Rate \\u2014 writes per source over time (spike = attack)\", \"renderer\": \"chart\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 6, \"x\": 0, \"y\": 14}, \"searchesIndex\": 4, \"rendererOptions\": {\"Orientation\": \"stacked\", \"Stack\": \"grouped\", \"Smoothing\": \"normal\", \"XAxisSplitLine\": \"no\", \"YAxisSplitLine\": \"no\", \"IncludeOther\": \"yes\", \"ConnectNulls\": \"yes\", \"LogScale\": \"no\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 8, \"title\": \"Modbus Read Rate \\u2014 sustained reads = register recon\", \"renderer\": \"chart\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 6, \"x\": 8, \"y\": 14}, \"searchesIndex\": 5, \"rendererOptions\": {\"Orientation\": \"stacked\", \"Stack\": \"grouped\", \"Smoothing\": \"normal\", \"XAxisSplitLine\": \"no\", \"YAxisSplitLine\": \"no\", \"IncludeOther\": \"yes\", \"ConnectNulls\": \"yes\", \"LogScale\": \"no\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 9, \"title\": \"\\ud83d\\udea8 OT Security Notices \\u2014 all Zeek detection events\", \"renderer\": \"table\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 8, \"x\": 0, \"y\": 20}, \"searchesIndex\": 14, \"rendererOptions\": {}}, {\"id\": 10, \"title\": \"\\ud83d\\udea8 Switch Recon-Then-Throw \\u2014 deliberate recon before throw\", \"renderer\": \"table\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 8, \"x\": 8, \"y\": 20}, \"searchesIndex\": 17, \"rendererOptions\": {}}, {\"id\": 11, \"title\": \"All MQTT Publishes \\u2014 switch throws, recon, retained messages\", \"renderer\": \"table\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 8, \"x\": 0, \"y\": 28}, \"searchesIndex\": 0, \"rendererOptions\": {}}, {\"id\": 12, \"title\": \"MQTT Publish Rate by Source IP\", \"renderer\": \"chart\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 8, \"x\": 8, \"y\": 28}, \"searchesIndex\": 9, \"rendererOptions\": {\"chartType\": \"area\", \"Stack\": \"grouped\", \"Smoothing\": \"normal\", \"Orientation\": \"v\", \"XAxisSplitLine\": \"no\", \"YAxisSplitLine\": \"no\", \"IncludeOther\": \"yes\", \"ConnectNulls\": \"yes\", \"LogScale\": \"no\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 13, \"title\": \"\\ud83d\\udea8 DETECT \\u2014 Modbus Write from Unauthorized IP\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 8, \"row\": 4, \"x\": 0, \"y\": 36}, \"searchesIndex\": 11, \"rendererOptions\": {}}, {\"id\": 14, \"title\": \"\\ud83d\\udea8 DETECT \\u2014 Switch Throw from External IP\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 8, \"row\": 4, \"x\": 8, \"y\": 36}, \"searchesIndex\": 10, \"rendererOptions\": {}}, {\"id\": 15, \"title\": \"All Modbus Transactions \\u2014 full function code log\", \"renderer\": \"table\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 8, \"x\": 0, \"y\": 40}, \"searchesIndex\": 6, \"rendererOptions\": {}}, {\"id\": 16, \"title\": \"Modbus Exception Log \\u2014 PLC rejection responses\", \"renderer\": \"table\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 8, \"x\": 8, \"y\": 40}, \"searchesIndex\": 13, \"rendererOptions\": {}}, {\"id\": 17, \"title\": \"Modbus Exceptions by IP \\u2014 which sources are getting rejected\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 4, \"x\": 0, \"y\": 48}, \"searchesIndex\": 7, \"rendererOptions\": {}}, {\"id\": 18, \"title\": \"MQTT Client Summary \\u2014 publish/subscribe volume per client\", \"renderer\": \"table\", \"hideZoom\": false, \"span\": {\"col\": 4, \"row\": 4, \"x\": 4, \"y\": 48}, \"searchesIndex\": 15, \"rendererOptions\": {}}, {\"id\": 19, \"title\": \"Retained Messages \\u2014 discovery beacons and persistent state topics\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 4, \"x\": 8, \"y\": 48}, \"searchesIndex\": 2, \"rendererOptions\": {}}, {\"id\": 20, \"title\": \"Invalid MQTT Payloads \\u2014 malformed cmd/ messages\", \"renderer\": \"table\", \"hideZoom\": true, \"span\": {\"col\": 4, \"row\": 4, \"x\": 12, \"y\": 48}, \"searchesIndex\": 21, \"rendererOptions\": {}}, {\"id\": 21, \"title\": \"Topic Activity Timeline \\u2014 MQTT messages per topic over time\", \"renderer\": \"chart\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 6, \"x\": 0, \"y\": 52}, \"searchesIndex\": 1, \"rendererOptions\": {\"Orientation\": \"stacked\", \"Stack\": \"grouped\", \"Smoothing\": \"normal\", \"XAxisSplitLine\": \"no\", \"YAxisSplitLine\": \"no\", \"IncludeOther\": \"yes\", \"ConnectNulls\": \"yes\", \"LogScale\": \"no\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}, {\"id\": 22, \"title\": \"MQTT Connection Rate \\u2014 broker reconnects per source (flood = attack)\", \"renderer\": \"chart\", \"hideZoom\": false, \"span\": {\"col\": 8, \"row\": 6, \"x\": 8, \"y\": 52}, \"searchesIndex\": 8, \"rendererOptions\": {\"chartType\": \"area\", \"Stack\": \"grouped\", \"Smoothing\": \"normal\", \"Orientation\": \"v\", \"XAxisSplitLine\": \"no\", \"YAxisSplitLine\": \"no\", \"IncludeOther\": \"yes\", \"ConnectNulls\": \"yes\", \"LogScale\": \"no\", \"Colors\": [\"#00AB49\", \"#128EE3\", \"#35FF94\", \"#00AAE3\", \"#2B9CFF\", \"#FFFF00\", \"#CD2CD0\", \"#8DC63F\", \"#EE9400\", \"#1B50EA\", \"#00D1A6\", \"#FCF759\"]}}], \"liveUpdateInterval\": 30, \"linkZooming\": true, \"grid\": {}, \"version\": 2}",
+  "Data": {
+    "timeframe": {
+      "durationString": "PT1H",
+      "timeframe": "iso",
+      "timezone": null,
+      "start": null,
+      "end": null
+    },
+    "searches": [
+      {
+        "alias": "mqtt_publishes",
+        "query": "tag=corelight_mqtt_publish | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
+        "color": null
+      },
+      {
+        "alias": "topic_timeline",
+        "query": "tag=corelight_mqtt_publish | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json topic | count by topic over 30s | chart count by topic",
+        "color": null
+      },
+      {
+        "alias": "retained_msgs",
+        "query": "tag=corelight_mqtt_publish | grep \"\\\"retain\\\":true\" | json \"id.orig_h\" topic | table \"id.orig_h\" topic",
+        "color": null
+      },
+      {
+        "alias": "modbus_write_count",
+        "query": "tag=corelight_modbus | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "modbus_write_rate",
+        "query": "tag=corelight_modbus | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" func | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "modbus_read_rate",
+        "query": "tag=corelight_modbus | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep \"\\\"func\\\":\\\"READ\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" func | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "all_modbus",
+        "query": "tag=corelight_modbus | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | json \"id.orig_h\" func unit tid | table \"id.orig_h\" func unit tid",
+        "color": null
+      },
+      {
+        "alias": "modbus_exceptions_by_ip",
+        "query": "tag=corelight_modbus | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep \"\\\"func\\\":\\\"EXCEPTION\" | json \"id.orig_h\" func | count by \"id.orig_h\" func | table \"id.orig_h\" func count",
+        "color": null
+      },
+      {
+        "alias": "mqtt_reconnect_rate",
+        "query": "tag=corelight_mqtt_connect | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "mqtt_pub_rate_by_ip",
+        "query": "tag=corelight_mqtt_publish | grep \"\\\"from_client\\\":true\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" | count by \"id.orig_h\" over 30s | chart count by \"id.orig_h\"",
+        "color": null
+      },
+      {
+        "alias": "detect_switch_throws",
+        "query": "tag=corelight_mqtt_publish | grep \"\\\"from_client\\\":true\" | grep \"sw1/cmd/throw\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
+        "color": null
+      },
+      {
+        "alias": "detect_modbus_writes",
+        "query": "tag=corelight_modbus | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" func | table \"id.orig_h\" func",
+        "color": null
+      },
+      {
+        "alias": "modbus_writes_detail",
+        "query": "tag=corelight_modbus | json \"id.orig_h\" func unit register_start values authorized | sort by TIMESTAMP desc | table \"id.orig_h\" func unit register_start values authorized",
+        "color": null
+      },
+      {
+        "alias": "modbus_exceptions_detail",
+        "query": "tag=corelight_modbus | json \"id.orig_h\" func unit exception | sort by TIMESTAMP desc | table \"id.orig_h\" func unit exception",
+        "color": null
+      },
+      {
+        "alias": "ot_notices_detail",
+        "query": "tag=corelight_notice | json \"id.orig_h\" note msg | sort by TIMESTAMP desc | table \"id.orig_h\" note msg",
+        "color": null
+      },
+      {
+        "alias": "mqtt_summary_detail",
+        "query": "tag=corelight_mqtt_publish | json client publish_count subscribe_count distinct_topics bytes_published | sort by publish_count desc | table client publish_count subscribe_count distinct_topics bytes_published",
+        "color": null
+      },
+      {
+        "alias": "switch_cmd_history",
+        "query": "tag=corelight grep \"switch\" grep \"cmd/throw\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
+        "color": null
+      },
+      {
+        "alias": "switch_recon_then_throw",
+        "query": "tag=corelight grep \"SwitchReconThenThrow\" | json note msg src | table note msg src",
+        "color": null
+      },
+      {
+        "alias": "gauge_modbus_write_vol",
+        "query": "tag=corelight_modbus | grep \"\\\"pdu_type\\\":\\\"REQ\\\"\" | grep \"\\\"func\\\":\\\"WRITE\" | count | gauge count",
+        "color": null
+      },
+      {
+        "alias": "switch_throw_count",
+        "query": "tag=corelight grep \"sw1/cmd/throw\" | grep \"\\\"from_client\\\":true\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "modbus_exception_count",
+        "query": "tag=corelight_modbus | grep \"\\\"func\\\":\\\"EXCEPTION\" | count | numbercard count",
+        "color": null
+      },
+      {
+        "alias": "invalid_payloads",
+        "query": "tag=corelight_mqtt_publish | grep \"\\\"from_client\\\":true\" | grep \"\\\"topic\\\":\\\"choochoo/\" | grep -v \"\\\"payload\\\":\\\"{\" | grep -v \"\\\"id.orig_h\\\":\\\"fe80\" | grep -v \"\\\"id.orig_h\\\":\\\"ff02\" | json \"id.orig_h\" topic payload | table \"id.orig_h\" topic payload",
+        "color": null
+      }
+    ],
+    "tiles": [
+      {
+        "id": 1,
+        "title": "Modbus Writes This Hour",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 0,
+          "y": 0
+        },
+        "searchesIndex": 3,
+        "rendererOptions": {}
+      },
+      {
+        "id": 2,
+        "title": "Switch Throws This Hour",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 4,
+          "y": 0
+        },
+        "searchesIndex": 19,
+        "rendererOptions": {}
+      },
+      {
+        "id": 3,
+        "title": "Modbus Exceptions This Hour",
+        "renderer": "numbercard",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 8,
+          "y": 0
+        },
+        "searchesIndex": 20,
+        "rendererOptions": {}
+      },
+      {
+        "id": 4,
+        "title": "Modbus Write Volume \u2014 gauge",
+        "renderer": "gauge",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 12,
+          "y": 0
+        },
+        "searchesIndex": 18,
+        "rendererOptions": {}
+      },
+      {
+        "id": 5,
+        "title": "Modbus Register Writes \u2014 every write with register, value, auth status",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 10,
+          "x": 0,
+          "y": 4
+        },
+        "searchesIndex": 12,
+        "rendererOptions": {}
+      },
+      {
+        "id": 6,
+        "title": "Switch Command History \u2014 all throw commands with source IP",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 10,
+          "x": 8,
+          "y": 4
+        },
+        "searchesIndex": 16,
+        "rendererOptions": {}
+      },
+      {
+        "id": 7,
+        "title": "Modbus Write Rate \u2014 writes per source over time (spike = attack)",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 6,
+          "x": 0,
+          "y": 14
+        },
+        "searchesIndex": 4,
+        "rendererOptions": {
+          "Orientation": "stacked",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 8,
+        "title": "Modbus Read Rate \u2014 sustained reads = register recon",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 6,
+          "x": 8,
+          "y": 14
+        },
+        "searchesIndex": 5,
+        "rendererOptions": {
+          "Orientation": "stacked",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 9,
+        "title": "\ud83d\udea8 OT Security Notices \u2014 all Zeek detection events",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 0,
+          "y": 20
+        },
+        "searchesIndex": 14,
+        "rendererOptions": {}
+      },
+      {
+        "id": 10,
+        "title": "\ud83d\udea8 Switch Recon-Then-Throw \u2014 deliberate recon before throw",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 8,
+          "y": 20
+        },
+        "searchesIndex": 17,
+        "rendererOptions": {}
+      },
+      {
+        "id": 11,
+        "title": "All MQTT Publishes \u2014 switch throws, recon, retained messages",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 0,
+          "y": 28
+        },
+        "searchesIndex": 0,
+        "rendererOptions": {}
+      },
+      {
+        "id": 12,
+        "title": "MQTT Publish Rate by Source IP",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 8,
+          "y": 28
+        },
+        "searchesIndex": 9,
+        "rendererOptions": {
+          "chartType": "area",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "Orientation": "v",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 13,
+        "title": "\ud83d\udea8 DETECT \u2014 Modbus Write from Unauthorized IP",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 8,
+          "row": 4,
+          "x": 0,
+          "y": 36
+        },
+        "searchesIndex": 11,
+        "rendererOptions": {}
+      },
+      {
+        "id": 14,
+        "title": "\ud83d\udea8 DETECT \u2014 Switch Throw from External IP",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 8,
+          "row": 4,
+          "x": 8,
+          "y": 36
+        },
+        "searchesIndex": 10,
+        "rendererOptions": {}
+      },
+      {
+        "id": 15,
+        "title": "All Modbus Transactions \u2014 full function code log",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 0,
+          "y": 40
+        },
+        "searchesIndex": 6,
+        "rendererOptions": {}
+      },
+      {
+        "id": 16,
+        "title": "Modbus Exception Log \u2014 PLC rejection responses",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 8,
+          "x": 8,
+          "y": 40
+        },
+        "searchesIndex": 13,
+        "rendererOptions": {}
+      },
+      {
+        "id": 17,
+        "title": "Modbus Exceptions by IP \u2014 which sources are getting rejected",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 0,
+          "y": 48
+        },
+        "searchesIndex": 7,
+        "rendererOptions": {}
+      },
+      {
+        "id": 18,
+        "title": "MQTT Client Summary \u2014 publish/subscribe volume per client",
+        "renderer": "table",
+        "hideZoom": false,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 4,
+          "y": 48
+        },
+        "searchesIndex": 15,
+        "rendererOptions": {}
+      },
+      {
+        "id": 19,
+        "title": "Retained Messages \u2014 discovery beacons and persistent state topics",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 8,
+          "y": 48
+        },
+        "searchesIndex": 2,
+        "rendererOptions": {}
+      },
+      {
+        "id": 20,
+        "title": "Invalid MQTT Payloads \u2014 malformed cmd/ messages",
+        "renderer": "table",
+        "hideZoom": true,
+        "span": {
+          "col": 4,
+          "row": 4,
+          "x": 12,
+          "y": 48
+        },
+        "searchesIndex": 21,
+        "rendererOptions": {}
+      },
+      {
+        "id": 21,
+        "title": "Topic Activity Timeline \u2014 MQTT messages per topic over time",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 6,
+          "x": 0,
+          "y": 52
+        },
+        "searchesIndex": 1,
+        "rendererOptions": {
+          "Orientation": "stacked",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      },
+      {
+        "id": 22,
+        "title": "MQTT Connection Rate \u2014 broker reconnects per source (flood = attack)",
+        "renderer": "chart",
+        "hideZoom": false,
+        "span": {
+          "col": 8,
+          "row": 6,
+          "x": 8,
+          "y": 52
+        },
+        "searchesIndex": 8,
+        "rendererOptions": {
+          "chartType": "area",
+          "Stack": "grouped",
+          "Smoothing": "normal",
+          "Orientation": "v",
+          "XAxisSplitLine": "no",
+          "YAxisSplitLine": "no",
+          "IncludeOther": "yes",
+          "ConnectNulls": "yes",
+          "LogScale": "no",
+          "Colors": [
+            "#00AB49",
+            "#128EE3",
+            "#35FF94",
+            "#00AAE3",
+            "#2B9CFF",
+            "#FFFF00",
+            "#CD2CD0",
+            "#8DC63F",
+            "#EE9400",
+            "#1B50EA",
+            "#00D1A6",
+            "#FCF759"
+          ]
+        }
+      }
+    ],
+    "liveUpdateInterval": 30,
+    "linkZooming": true,
+    "grid": {},
+    "version": 2
+  },
   "Labels": null
 }
