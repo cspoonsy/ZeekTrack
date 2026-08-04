@@ -402,15 +402,17 @@ services:
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-choochoo-admin}
       COMPOSE_FILE: /compose/docker-compose.fake.yml
-      # Comma-separated profiles that were used to bring the stack up.
-      # Used by rebuild/per-service restart so compose knows which services exist.
-      COMPOSE_PROFILES: ${COMPOSE_PROFILES:-mqtt,sensor,gravwell}
-      # Which choochoo web container to proxy train/switch commands through.
-      # Use http://choochoo-web-mqtt:8000 when running the mqtt-only profile.
-      # host network mode means container names don't resolve — use localhost + mapped port.
-      # Train (Modbus) is web-modbus on :8001; switch (MQTT) is web-mqtt on :8000.
+      # Comma-separated profiles active on this host. Used by rebuild/restart.
+      COMPOSE_PROFILES: ${COMPOSE_PROFILES:-modbus,admin}
+      # In multi-Pi deployments set these to the web-modbus Pi's LAN IP:
+      #   TRAIN_API_URL=http://192.168.88.12:8000
+      #   SWITCH_API_URL=http://192.168.88.12:8000
+      # In single-host deployments web-modbus is on :8001 (MODBUS_WEB_PORT).
       TRAIN_API_URL: ${TRAIN_API_URL:-http://localhost:8001}
       SWITCH_API_URL: ${SWITCH_API_URL:-http://localhost:8000}
+      # Network interface for throughput stats. eth0 on a dedicated admin Pi;
+      # br-choochoo0 when co-hosted with the Docker stack on a single host.
+      STATS_IFACE: ${STATS_IFACE:-eth0}
     profiles: [admin]
     restart: unless-stopped
     logging:

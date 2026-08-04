@@ -36,9 +36,12 @@ import secrets
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "choochoo-admin")
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 COMPOSE_FILE = os.environ.get("COMPOSE_FILE", "/compose/docker-compose.fake.yml")
-COMPOSE_PROFILES = os.environ.get("COMPOSE_PROFILES", "mqtt,sensor,gravwell").split(",")
+COMPOSE_PROFILES = os.environ.get("COMPOSE_PROFILES", "modbus,admin").split(",")
 TRAIN_API_URL = os.environ.get("TRAIN_API_URL", "http://localhost:8001")
 SWITCH_API_URL = os.environ.get("SWITCH_API_URL", "http://localhost:8000")
+# Network interface for throughput stats. On the admin Pi (multi-Pi deployment)
+# there is no br-choochoo0 bridge — use eth0. Override via STATS_IFACE env var.
+STATS_IFACE = os.environ.get("STATS_IFACE", "eth0")
 
 RESTARTABLE_CONTAINERS = [
     "choochoo-mosquitto-fake",
@@ -124,7 +127,7 @@ def _running_containers() -> list[dict]:
     return result
 
 
-def _net_rate(iface: str = "br-choochoo0") -> dict | None:
+def _net_rate(iface: str = STATS_IFACE) -> dict | None:
     """Return RX/TX rates in bytes/sec for iface since the last call."""
     global _net_snapshot
     try:
@@ -179,7 +182,7 @@ def api_stats(_user: str = Depends(require_auth)):
         "cpu_pct": cpu_pct,
         "mem": mem_data,
         "disk": disk_data,
-        "net": _net_rate("br-choochoo0"),
+        "net": _net_rate(),
     }
 
 
