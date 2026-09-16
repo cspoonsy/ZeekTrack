@@ -63,6 +63,18 @@ _DEFAULT_BLE_NAME = "BuWizz3"
 _SCAN_TIMEOUT_S = 10.0
 _CONNECT_TIMEOUT_S = 15.0
 
+# Onboard-LED indicator behavior. Baseline is a dim blue; every command
+# received by the outstation briefly flashes red before returning to
+# blue. Gives the train a visible "network activity" signal — useful in
+# the training range for spotting attacker traffic vs. quiescent state.
+# Values are 0..255 per channel; brightness is a percent applied uniformly
+# so it's easy to tune for the room. Overridable via env for on-site
+# lighting adjustments without editing code.
+_IDLE_COLOR_RGB = (0, 0, 255)          # blue
+_FLASH_COLOR_RGB = (255, 0, 0)         # red
+_LED_BRIGHTNESS_PCT_DEFAULT = 25       # 25 % — subdued in room light
+_FLASH_DURATION_S = 0.25
+
 # Auto-reconnect. When the BLE link goes dead (see BuWizzTrain._link_alive),
 # a background task tears down the dead BleakClient and re-runs the connect
 # flow. Backoff starts at _RECONNECT_INITIAL_S and doubles (capped at
@@ -81,6 +93,14 @@ def _power_to_int8(direction: Direction, power: int) -> int:
 
 def _signed_byte(v: int) -> int:
     return v & 0xFF
+
+
+def _build_led_frame(rgb: tuple[int, int, int], brightness_pct: int) -> bytes:
+    """Build a `0x36 R G B ...` LED command scaled to brightness_pct.
+    Replicates the single RGB across all four onboard LEDs."""
+    scale = max(0, min(100, brightness_pct)) / 100
+    scaled = [max(0, min(255, round(c * scale))) for c in rgb]
+    return bytes([_CMD_SET_LED] + scaled * 4)
 
 
 class BuWizzTrain(TrainClient):
@@ -108,6 +128,21 @@ class BuWizzTrain(TrainClient):
         self._char = None  # BleakGATTCharacteristic
         self._keepalive_task: asyncio.Task | None = None
         self._reconnect_task: asyncio.Task | None = None
+
+        # LED indicator state. Brightness is percentage (0..100) applied
+        # uniformly across all channels; operator's light() slider scales
+        # this. _flash_in_flight is a coarse re-entrancy guard so
+        # back-to-back writes don't stampede overlapping flash tasks.
+        try:
+            self._led_brightness_pct = max(0, min(100, int(
+                os.environ.get(
+                    "CHOOCHOO_BUWIZZ_LED_BRIGHTNESS",
+                    _LED_BRIGHTNESS_PCT_DEFAULT,
+                )
+            )))
+        except ValueError:
+            self._led_brightness_pct = _LED_BRIGHTNESS_PCT_DEFAULT
+        self._flash_in_flight = False
 
     # --- TrainClient API ---------------------------------------------------
 
@@ -179,16 +214,47 @@ class BuWizzTrain(TrainClient):
                 self.train_id,
             )
             return
-        # Brightness 0..10 -> white 0..255 across all four LEDs. Sending an
-        # empty 0x36 (per the API) reverts to default behavior; we do that
-        # for brightness 0 so the LEDs go back to indicating BLE state.
+        # Operator's brightness slider (0..10) scales the idle-color
+        # brightness. Empty 0x36 (per the API) reverts to default
+        # firmware LED behavior — we use that for brightness 0 so the
+        # LEDs revert to indicating BLE state.
         if brightness <= 0:
             self._run(self._write(bytes([_CMD_SET_LED])))
             return
-        level = max(0, min(255, round(brightness * 255 / 10)))
-        rgb = [level, level, level]
-        frame = bytes([_CMD_SET_LED] + rgb * 4)
-        self._run(self._write(frame))
+        pct = max(0, min(100, round(brightness * 100 / 10)))
+        self._led_brightness_pct = pct
+        self._run(self._write(_build_led_frame(_IDLE_COLOR_RGB, pct)))
+
+    def flash_indicator(self) -> None:
+        """Fire-and-forget: flash the onboard LEDs red for a short window
+        then revert to the idle blue. Safe to call from any thread; the
+        actual GATT writes happen on the bleak asyncio loop. Coalesces
+        rapid calls via _flash_in_flight so back-to-back commands don't
+        stampede the BLE link."""
+        if self._client is None or not self._link_alive:
+            return
+        if self._flash_in_flight:
+            return
+        if self._loop is None:
+            return
+        # Schedule without awaiting — this is fire-and-forget from the
+        # caller's perspective.
+        asyncio.run_coroutine_threadsafe(self._flash_indicator(), self._loop)
+
+    async def _flash_indicator(self) -> None:
+        self._flash_in_flight = True
+        try:
+            with contextlib.suppress(Exception):
+                await self._raw_write(_build_led_frame(
+                    _FLASH_COLOR_RGB, self._led_brightness_pct,
+                ))
+            await asyncio.sleep(_FLASH_DURATION_S)
+            with contextlib.suppress(Exception):
+                await self._raw_write(_build_led_frame(
+                    _IDLE_COLOR_RGB, self._led_brightness_pct,
+                ))
+        finally:
+            self._flash_in_flight = False
 
     def state(self) -> TrainState:
         # `_connected` is a coarse "connect() has been called" flag; not
@@ -252,6 +318,12 @@ class BuWizzTrain(TrainClient):
         # the last motor frame inside the watchdog window. The watchdog-arm
         # write also proves the link is live and flips _link_alive True.
         await self._raw_write(bytes([_CMD_WATCHDOG, _WATCHDOG_TIMEOUT_S]))
+        # Set the idle indicator color (dim blue). Failure here is non-
+        # fatal — the LED is cosmetic.
+        with contextlib.suppress(Exception):
+            await self._raw_write(_build_led_frame(
+                _IDLE_COLOR_RGB, self._led_brightness_pct,
+            ))
         loop = asyncio.get_running_loop()
         self._keepalive_task = loop.create_task(self._keepalive_loop())
         if self._reconnect_task is None:
