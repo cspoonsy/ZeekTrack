@@ -281,6 +281,21 @@ hubs.
 
 Unit ID `1`. No auth, no TLS — baseline posture.
 
+```sh
+docker compose -f docker-compose.real.yml \
+    --profile modbus --profile mqtt \
+    --profile attacker up -d
+```
+
+On the physical RaspPi box:
+```sh
+./scripts/noise-scripts/start.sh
+```
+
+And to tear down:
+```sh
+./scripts/noise-scripts/stop.sh
+```
 | Address | Type | Meaning |
 |---|---|---|
 | HR 0 | Holding reg, signed int16 | Motor power, -100..100 (sign = direction) |
